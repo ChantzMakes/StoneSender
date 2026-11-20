@@ -1,6 +1,6 @@
 /** 3D view + playback state (scrubber time, colours, camera requests, measuring). */
 import { create } from 'zustand';
-import type { StockSetup, ToolSetup } from '@/lib/sim/setup';
+import type { StockSetup } from '@/lib/sim/setup';
 
 export type ColorMode = 'type' | 'feed' | 'z' | 'power';
 export type ViewKind = 'top' | 'front' | 'side' | 'iso' | 'fit' | 'machine';
@@ -23,13 +23,18 @@ interface SimStore {
   measuring: boolean;
   measure: Vec3[];
   viewRequest: { kind: ViewKind; seq: number } | null;
-  /** Stock and tool for the simulator (defaults come from the active profile) */
+  /** Stock for the simulator (defaults come from the active profile) */
   stock: StockSetup | null;
-  tool: ToolSetup | null;
-  /** Profile the stock/tool defaults were taken from */
+  /** Profile the stock / tool assignments were set up for */
   setupFor: string | null;
   showMachine: boolean;
   showStock: boolean;
+  /** Library tool used when a move's T number has no assignment (T0 / unknown) */
+  defaultToolId: string | null;
+  /** Job T number → library tool id */
+  jobTools: Record<number, string>;
+  showRemoval: boolean;
+  showToolpath: boolean;
   setTime(t: number): void;
   setPlaying(p: boolean): void;
   set(p: Partial<Omit<SimStore, 'setTime' | 'setPlaying' | 'set' | 'requestView' | 'addMeasurePoint'>>): void;
@@ -53,10 +58,13 @@ export const useSim = create<SimStore>((set, get) => ({
   measure: [],
   viewRequest: null,
   stock: null,
-  tool: null,
   setupFor: null,
   showMachine: true,
   showStock: true,
+  defaultToolId: null,
+  jobTools: {},
+  showRemoval: true,
+  showToolpath: true,
   setTime: (t) => set({ time: Math.max(0, t) }),
   setPlaying: (p) => set({ playing: p }),
   set: (p) => set(p),

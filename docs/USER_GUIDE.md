@@ -98,10 +98,33 @@ really is.
 
 The 3D view also shows a model of **your machine**, built from your profile — it moves along with the
 playback (or with the real machine while connected). Set your **stock size and where your zero is on it**
-with the box icon (*Stock & tool*); the view then warns, in a box at the top right, if the job leaves the
+with the settings icon (*Stock & tools*); the view then warns, in a box at the top right, if the job leaves the
 machine's travel, cuts below the bottom of the stock, or makes rapid moves through it. The same warnings
 appear in the pre-flight list. The green dot marks the home position; the travel box turns orange when soft
 limits are on.
+
+### Material simulation
+
+The 3D view cuts the stock away as the job plays (layers icon to switch it off). Routers show the
+remaining material, lasers show how dark each spot burns (more power or a slower feed = darker), rotary
+jobs show the round stock turning with A. Drag the slider back and forth to watch it; the flag icon jumps
+to the **finished result**. The panel at the top left lists anything the simulation found:
+
+- **Rapid move cuts material** (red) — a G0 move goes through stock that hasn't been cut yet.
+- **Cuts below the stock** (pink).
+- **Collet / holder hits the material** — the cut is deeper than the bit sticks out of the collet.
+- **Cut deeper than the flute length** — the smooth shank would rub on the walls.
+- **Small island left** (yellow) — a sliver of material left inside a pocket, often a stepover that is too big.
+
+These also appear in the pre-flight list. **Export STL** (routers, rotary) saves the simulated part as a
+3D mesh; **Export PNG** (lasers) saves the burn preview as an image.
+
+Open the settings icon (**Stock & tools**) to set the stock size, which tool each T number in the job
+uses, and the simulation resolution. **Tool library…** lets you add your own bits: shape (flat, ball,
+V-bit, engraving bit with a flat tip, drill), diameter, flute length, stick-out from the collet and collet
+nut diameter — the last three drive the holder and flute checks. A job's T1 uses the library tool numbered
+1 unless you pick another. The simulation is a guide, not a guarantee: it uses a grid (0.1–1 mm), so very
+small details are approximate.
 
 The clock icon in the Job panel shows the history of jobs you've run.
 

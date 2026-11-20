@@ -39,6 +39,8 @@ test('the G-code tab highlights code, marks errors, and edits can be used', asyn
 });
 
 test('pre-flight checks the job against the machine travel from the work zero', async ({ page }) => {
+  // Long flow; headless Chromium renders the material simulation in software.
+  test.slow();
   await connectDemo(page);
   await openSample(page, '01-square.nc');
   await expect(page.getByTestId('stat-time')).toBeVisible();

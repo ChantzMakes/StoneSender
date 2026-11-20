@@ -177,6 +177,62 @@ pub fn text_file_write(path: String, contents: String) -> Result<(), String> {
     write_atomic(std::path::Path::new(&path), &contents).map_err(|e| e.to_string())
 }
 
+const BINARY_EXTENSIONS: &[&str] = &["stl", "png"];
+
+/// Decode a percent-encoded header value (the path is sent encoded so any
+/// Unicode path survives the HTTP-style IPC header).
+fn percent_decode(s: &str) -> Result<String, String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            let hex = s.get(i + 1..i + 3).ok_or("bad path encoding")?;
+            out.push(u8::from_str_radix(hex, 16).map_err(|_| "bad path encoding")?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(|_| "bad path encoding".to_string())
+}
+
+fn check_binary_ext(path: &str) -> Result<(), String> {
+    let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_default();
+    if BINARY_EXTENSIONS.contains(&ext.as_str()) {
+        Ok(())
+    } else {
+        Err(format!("unsupported file type .{ext}"))
+    }
+}
+
+/// Write a user-chosen binary file (STL / PNG exports). The bytes are the raw
+/// IPC body; the path (from the native save dialog) is in the `path` header.
+#[tauri::command(async)]
+pub fn binary_file_write(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let path = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path")?;
+    let path = percent_decode(path)?;
+    check_binary_ext(&path)?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw bytes".into());
+    };
+    crate::storage::write_atomic_bytes(std::path::Path::new(&path), bytes).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_percent_encoded_paths() {
+        assert_eq!(percent_decode("C%3A%5Cx%20y%5C%C3%A9.stl").unwrap(), r"C:\x y\é.stl");
+        assert!(percent_decode("%zz").is_err());
+        assert!(check_binary_ext("a.STL").is_ok());
+        assert!(check_binary_ext("a.exe").is_err());
+    }
+}
+
 // ----- jobs -------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]

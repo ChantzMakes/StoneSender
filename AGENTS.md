@@ -10,8 +10,9 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 3 | Full G-code interpreter, planner/time estimator, job stats, Monaco editor, drag-and-drop / recent files / job history, travel check in pre-flight | **done** |
 | 4 | 3D toolpath viewer, live tool tracking, scrubber/playback, camera views, rulers, measuring | **done** |
 | 5 | Parametric machine model (router/laser/combo/rotary, gantry/table kinematics), accel-aware playback, travel/below-stock/rapid-through-stock checks in the view and pre-flight | **done** |
-| 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | next |
-| 7–8 | See the spec (advanced, polish/distribution) | — |
+| 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | **done** |
+| 7 | Advanced (see the spec: tool changes, start-from-line, probing, gamepad…) | next |
+| 8 | Polish / distribution | — |
 
 ## Commands
 
@@ -33,9 +34,10 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
 
-All of the above pass as of the end of Phase 5 (Rust: 78 tests incl. 19 link/streaming integration tests against
-the emulator; Vitest: 98 incl. 9 planner-vs-emulator timing checks; Playwright: 21, run with 4 workers because
-headless Chromium renders WebGL in software; clippy clean with `-D warnings`).
+All of the above pass as of the end of Phase 6 (Rust: 79 tests incl. 19 link/streaming integration tests against
+the emulator; Vitest: 112 incl. 9 planner-vs-emulator timing checks and 13 removal/export tests; Playwright: 25,
+run with 4 workers because headless Chromium renders WebGL in software — long flows use `test.slow()`;
+clippy clean with `-D warnings`).
 
 ## Layout
 
@@ -59,8 +61,11 @@ src/
   lib/grbl/            error/alarm tables, $$ metadata, profile↔$$ diff/sync, override bytes,
                        command builders (zero, go-to, park, WCS — modal-units aware)
   lib/job/preflight.ts pre-flight checks (spec §8)
-  lib/sim/             setup.ts (stock/tool setup, stock box by origin mode, assumed work offset when
-                       offline), checks.ts (travel / below-stock / rapid-through-stock collision checks)
+  lib/sim/             setup.ts (stock setup, stock box by origin mode, assumed work offset when
+                       offline), checks.ts (travel / below-stock / rapid-through-stock collision checks),
+                       tools.ts (tool library schema, shapes, T-number resolution), removal.ts (material-
+                       removal engine), sim.worker.ts + client.ts (worker, keyframes, patches),
+                       export.ts (binary STL + dependency-free PNG encoder)
   lib/gcode/           G-code engine: interpreter.ts (modal interpreter, GRBL error codes, arcs,
                        offsets, checkpoints for start-from-line), toolpath.ts (columnar typed-array
                        storage), planner.ts (GRBL planner model → time), stats.ts, analyze.ts,
@@ -72,9 +77,11 @@ src/
                        jog, control (machine buttons, overrides), wcs, job (panel, stats, history,
                        drop), settings ($$ editor), editor (Monaco, lazy-loaded),
                        viewer (three.js / react-three-fiber, lazy-loaded: Scene.tsx, Viewer3D.tsx,
-                       MachineModel.tsx parametric machine, StockDialog.tsx, useSimSetup.ts)
+                       MachineModel.tsx parametric machine, RemovalView.tsx removal meshes, RemovalPanel.tsx,
+                       StockDialog.tsx, ToolLibraryDialog.tsx, useSimSetup.ts)
   store/sim.ts         playback time/speed, colour mode, view toggles, camera requests, measuring
   store/analysis.ts    re-runs the worker analysis when job text / profile / motion settings change
+  store/removal.ts     removal sim state; grid buffers at module level; useRemovalSync (inputs + playback)
   components/ui/       shadcn-style primitives on Radix
 e2e/             Playwright specs
 samples/         G-code samples + shareable sample profiles
@@ -211,6 +218,42 @@ docs/USER_GUIDE.md
   stock checks; rotary skips them until the cylindrical sim. All three are **warnings** in pre-flight (the
   travel check keeps its Phase 3 block-when-homing-enabled rule and now names the first offending line).
 
+## Material removal conventions (Phase 6)
+
+- **Engine** (`lib/sim/removal.ts`): one grid per job. Router = Z heightmap over the stock (cell = top of the
+  remaining material); laser = accumulated energy (S/Smax × dwell, s/mm), drawn as 1 − exp(−40·e);
+  rotary = remaining radius over X × angle (A ∥ X, axis through work Y0 Z0). Tools are stamped at ≤ half a
+  cell along each move (arcs via `pointOnSegment`). Grid ≤ 1M cells (resolution coarsened to fit);
+  automatic resolution targets 0.6M cells (router/rotary) / 1M (laser), clamped 0.1–1 mm (laser ≤ 0.5).
+  **Laser grids cover only the burned area** (job cut bounds + 1 mm, clipped to the stock) so raster
+  spacing resolves; the rest of the sheet is a plain box.
+- **Time-driven:** `advanceTo(t)` applies everything up to planned time t, including part of a move
+  (acceleration-aware via the planner's motion profile). The worker runs the whole job once on `init`
+  (problems, islands, stats, up to 40 keyframes within a 160 MB budget), then answers `advance(t)` with
+  the changed rectangle only; going backwards restores the nearest keyframe. The client is latest-wins
+  (no queue of stale scrubs); the store throttles to ~60 ms and follows the live job's acknowledged line.
+- **Rendering:** geometry is built once per grid; patches update only the dirty rows of the vertex
+  buffers (`addUpdateRange`). The subscription is keyed on the geometry object (an HMR remount once left a
+  fresh geometry never filled). The plain stock box / rotary stock cylinder hide while removal is shown.
+- **Problems:** rapid that removes material (gouge; the very first rapid is skipped — its start is the
+  assumed work zero, which on a rotary is the axis), cut below the stock bottom, flute (material in a ring
+  just outside the cutter rises more than the flute length above the tip), holder (material within the
+  holder radius above tip + stick-out), islands (4-connected uncut components not touching the grid edge,
+  ≤ 4 × the largest cutter area, found at the end of the job). Max 200 events, one per kind per line.
+  In pre-flight they are **warnings** (islands: info); the removal gouge check replaces the Phase 5
+  rapid-through-stock warning when the simulation has run, since it knows what is already cut.
+- **Tools:** library in app settings (`settings.tools`, Zod `ToolSchema`), default 7 tools. A job's T n
+  uses: explicit assignment (Stock & tools dialog, per session) → library tool numbered n → default tool →
+  first tool (`resolveTool`). The Phase 5 `ToolSetup` (diameter/stick-out for checks and the machine
+  model) is now derived from the library tool for the job's first T (`useSimTool`); the separate bit
+  fields were removed.
+- **Exports:** STL = closed solid (heightfield top + walls + bottom, or rotary surface + end caps), binary,
+  mm, work coordinates; PNG = 8-bit RGB with stored deflate blocks (no compression dependency).
+  Desktop saves through the Tauri command `binary_file_write` (raw IPC body, percent-encoded path header,
+  `.stl`/`.png` only, atomic write); the browser backend downloads a blob.
+- drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
+- With the machine model hidden, moving-table machines no longer slide the job in Y.
+
 ## Profile / GRBL conventions
 
 - Machine bounds follow GRBL 1.1 `limits_go_home`: `negative-space` (stock) → every axis spans
@@ -243,6 +286,22 @@ Not modelled (yet): hard-limit switches (only via fault injection), safety door,
 spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, serial baud timing.
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
+
+## Known gaps after Phase 6
+
+- Heightmap model: no undercuts (fine for 3-axis routers), resolution-limited (details < 1–2 cells are
+  approximate), and side walls are vertical between cell centres. Lasers have no kerf/char model beyond
+  energy darkening; laser spot fixed at 0.2 mm.
+- Rotary: the cylinder model assumes the tool points straight down at the axis; removal events aren't
+  drawn as markers on the rotating stock (they are listed); islands are not searched on rotary.
+- Stock setup and tool assignments are per session (not saved with the job); the library itself persists.
+- Holder check treats the holder as a cylinder of the collet-nut diameter; spindle body / gantry vs
+  clamps are not checked. Flute/holder checks fire only when the tool is moving into material.
+- Removal sim runs only while the 3D view has been opened (the sync hook lives in the viewer); pre-flight
+  shows its results when available.
+- Large jobs: the init pass runs the whole job (a 1M-line file takes seconds); keyframe memory is capped at
+  160 MB. Performance pass is Phase 8.
+- PNG export is uncompressed (stored deflate): a 1M-cell burn map is ~3 MB.
 
 ## Known gaps after Phase 5
 

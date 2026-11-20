@@ -248,6 +248,15 @@ export const browserBackend: Backend = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
   },
+  async saveBinaryFile({ defaultName, bytes, mime }) {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = defaultName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
+  },
   async listPorts(): Promise<PortInfo[]> {
     return [];
   },

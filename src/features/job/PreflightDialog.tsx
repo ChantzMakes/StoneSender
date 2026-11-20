@@ -9,9 +9,11 @@ import type { MachineProfile } from '@/lib/profile/schema';
 import { errorMessage } from '@/lib/utils';
 import { machineBounds } from '@/lib/profile/geometry';
 import { runChecks } from '@/lib/sim/checks';
-import { defaultStock, defaultTool, stockBox } from '@/lib/sim/setup';
+import { defaultStock, stockBox } from '@/lib/sim/setup';
 import { useAnalysis } from '@/store/analysis';
+import { useRemoval } from '@/store/removal';
 import { useSim } from '@/store/sim';
+import { useSimTool } from '../viewer/useSimSetup';
 import { useLink } from '@/store/link';
 
 const ICON: Record<CheckLevel, React.ReactNode> = {
@@ -30,14 +32,13 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
   const analysis = useAnalysis((s) => s.result);
   const analysisStatus = useAnalysis((s) => s.status);
   const simStock = useSim((s) => s.stock);
-  const simTool = useSim((s) => s.tool);
+  const tool = useSimTool(profile);
   const wcoKey = status?.wco?.join(',');
   // Collision / limit checks against the stock, placed with the live work offset.
   const sim = useMemo(() => {
     const wco = status?.wco;
     if (!analysis || !wco || wco.length < 3) return null;
     const stock = simStock ?? defaultStock(profile);
-    const tool = simTool ?? defaultTool(profile);
     const b = machineBounds(profile);
     const checks = runChecks({
       tp: analysis.toolpath,
@@ -49,15 +50,19 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
     });
     return { checks, stock };
     // Re-run only when the offset, stock or job changes — not on every status report.
-  }, [analysis, profile, simStock, simTool, wcoKey]);
+  }, [analysis, profile, simStock, tool, wcoKey]);
+  // Laser burn simulation has nothing to report here.
+  const removalReady = useRemoval((s) => s.status === 'ready' && s.mode !== 'laser');
+  const removalEvents = useRemoval((s) => s.events);
+  const removal = removalReady ? removalEvents : null;
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const checks = useMemo(
-    () => (loaded && mode ? preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus, sim }) : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
+    () => (loaded && mode ? preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus, sim, removal }) : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
     // Status arrives several times a second; re-evaluate only when state or offsets change.
-    [loaded, mode, profile, controller, analysis, analysisStatus, sim, status?.state?.name, status?.wco?.join(',')],
+    [loaded, mode, profile, controller, analysis, analysisStatus, sim, removal, status?.state?.name, status?.wco?.join(',')],
   );
   const blocked = isBlocked(checks);
   const needsAck = mode === 'run';

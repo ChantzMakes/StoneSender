@@ -241,6 +241,8 @@ export interface Backend {
   // files (user-chosen via native dialogs)
   openTextFile(opts: { title: string; filters: FileFilter[] }): Promise<{ name: string; text: string } | null>;
   saveTextFile(opts: { title: string; defaultName: string; filters: FileFilter[]; text: string }): Promise<boolean>;
+  /** Save bytes (STL / PNG exports) to a user-chosen file. */
+  saveBinaryFile(opts: { title: string; defaultName: string; filters: FileFilter[]; bytes: Uint8Array; mime: string }): Promise<boolean>;
   // link
   listPorts(): Promise<PortInfo[]>;
   connect(req: ConnectRequest): Promise<void>;

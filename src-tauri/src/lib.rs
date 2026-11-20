@@ -58,6 +58,7 @@ pub fn run() {
             commands::app_settings_save,
             commands::text_file_read,
             commands::text_file_write,
+            commands::binary_file_write,
             commands::job_load,
             commands::job_load_text,
             commands::job_start,

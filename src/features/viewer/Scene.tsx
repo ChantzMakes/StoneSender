@@ -19,7 +19,9 @@ import type { Problem } from '@/lib/sim/checks';
 import type { StockSetup, ToolSetup } from '@/lib/sim/setup';
 import { isActivePhase, useLink } from '@/store/link';
 import { Bed, currentToolPose, MachineFrame, type MachineLayout, ProblemMarkers, StockBody, TableGroup, TravelAndHome } from './MachineModel';
+import { useRemoval } from '@/store/removal';
 import { useSim, type Vec3 } from '@/store/sim';
+import { RemovalView } from './RemovalView';
 
 // Z is up for CNC.
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -177,7 +179,7 @@ function Axes({ size, palette }: { size: number; palette: Palette }) {
         <lineBasicMaterial vertexColors />
       </lineSegments>
       {(['X', 'Y', 'Z'] as const).map((a, i) => (
-        <Html key={a} position={[i === 0 ? size * 1.08 : 0, i === 1 ? size * 1.08 : 0, i === 2 ? size * 1.08 : 0]} center className="pointer-events-none select-none">
+        <Html zIndexRange={[20, 0]} key={a} position={[i === 0 ? size * 1.08 : 0, i === 1 ? size * 1.08 : 0, i === 2 ? size * 1.08 : 0]} center className="pointer-events-none select-none">
           <span className="text-[11px] font-bold" style={{ color: ['#ff5a5a', '#4ce36a', '#4d8cff'][i], textShadow: `0 0 3px ${palette.background}` }}>
             {a}
           </span>
@@ -283,7 +285,7 @@ function Rulers({ analysis, profile, palette }: { analysis: AnalysisResult; prof
         <lineBasicMaterial color={palette.label} transparent opacity={0.6} />
       </lineSegments>
       {ticks.out.map((t, i) => (
-        <Html key={i} position={t.pos} center className="pointer-events-none select-none">
+        <Html zIndexRange={[20, 0]} key={i} position={t.pos} center className="pointer-events-none select-none">
           <span className="tabular text-[10px] whitespace-nowrap" style={{ color: palette.label }}>
             {t.text}
           </span>
@@ -345,7 +347,7 @@ function MeasureTool({ analysis, profile }: { analysis: AnalysisResult | null; p
         </lineSegments>
       )}
       {a && b && d && (
-        <Html position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]} center className="pointer-events-none select-none">
+        <Html zIndexRange={[20, 0]} position={[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]} center className="pointer-events-none select-none">
           <div className="tabular rounded bg-black/75 px-2 py-1 text-[11px] whitespace-nowrap text-yellow-300" data-testid="measure-label">
             {formatLength(Math.hypot(d[0]!, d[1]!, d[2]!), units, 2)} {u}
             <span className="ml-2 text-yellow-100/70">
@@ -499,6 +501,10 @@ export function Scene({ analysis, profile, palette, bounds, layout, stock, tool,
   const showEnvelope = useSim((s) => s.showEnvelope);
   const showMachine = useSim((s) => s.showMachine);
   const showStock = useSim((s) => s.showStock);
+  const showToolpath = useSim((s) => s.showToolpath);
+  const showRemoval = useSim((s) => s.showRemoval);
+  const removalReady = useRemoval((s) => s.status === 'ready');
+  const removalShown = showRemoval && removalReady;
   const size = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], 20);
   return (
     <>
@@ -520,12 +526,13 @@ export function Scene({ analysis, profile, palette, bounds, layout, stock, tool,
         />
       )}
       <Axes size={Math.max(size * 0.12, 10)} palette={palette} />
-      {showMachine && <MachineFrame layout={layout} profile={profile} analysis={analysis} tool={tool} />}
+      {showMachine && <MachineFrame layout={layout} profile={profile} analysis={analysis} tool={tool} hideStock={removalShown && showStock} />}
       <TableGroup layout={layout} analysis={analysis} profile={profile}>
         {showMachine && <Bed layout={layout} />}
-        {showStock && <StockBody stock={stock} profile={profile} />}
+        {showStock && !removalShown && <StockBody stock={stock} profile={profile} />}
+        {showStock && removalShown && <RemovalView analysis={analysis} profile={profile} color={stock.color} />}
         {showEnvelope && <TravelAndHome profile={profile} wco={wco} />}
-        {analysis && <ToolpathLines analysis={analysis} profile={profile} />}
+        {analysis && showToolpath && <ToolpathLines analysis={analysis} profile={profile} />}
         {analysis && showGrid && <Rulers analysis={analysis} profile={profile} palette={palette} />}
         <ProblemMarkers problems={problems} />
         <ToolMarkers analysis={analysis} profile={profile} />

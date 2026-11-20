@@ -47,6 +47,7 @@ test('rapids through the stock are flagged in the view and in pre-flight', async
   await dropJob(page, 'rapid.nc', 'G21 G90\nM3 S12000\nG4 P3\nG0 Z5\nG0 X10 Y10\nG1 Z-3 F200\nG0 X80\nG0 Z5\nM5\n');
   await expect(page.getByTestId('sim-problems')).toContainText('1 rapid move(s) through the stock, first at line 7');
   await page.getByTestId('run-job').click();
-  await expect(page.getByTestId('preflight-list')).toContainText('1 rapid move(s) pass through the stock');
+  // With the material simulation run, its gouge check (which knows what is already cut) replaces this warning.
+  await expect(page.getByTestId('preflight-list')).toContainText('Rapid moves cut material (lines 7)');
   await expect(page.getByTestId('preflight-list')).toContainText('Checked against stock');
 });

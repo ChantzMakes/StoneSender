@@ -21,6 +21,10 @@ fn safe_id(id: &str) -> Result<&str, String> {
 }
 
 pub fn write_atomic(path: &Path, contents: &str) -> io::Result<()> {
+    write_atomic_bytes(path, contents.as_bytes())
+}
+
+pub fn write_atomic_bytes(path: &Path, contents: &[u8]) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }

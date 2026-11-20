@@ -24,6 +24,12 @@ export const tauriBackend: Backend = {
     await invoke('text_file_write', { path, contents: text });
     return true;
   },
+  async saveBinaryFile({ title, defaultName, filters, bytes }) {
+    const path = await save({ title, defaultPath: defaultName, filters });
+    if (!path) return false;
+    await invoke('binary_file_write', bytes, { headers: { path: encodeURIComponent(path) } });
+    return true;
+  },
 
   listPorts: () => invoke('list_ports'),
   connect: (req) => invoke('link_connect', { req }),

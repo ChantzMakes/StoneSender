@@ -3,7 +3,11 @@
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 5 of 8.** Adds a parametric 3D model of your machine (router, laser, combo, rotary;
+> **Status: Phase 6 of 8.** Adds material-removal simulation: stock is cut away as the job plays
+> (router heightmap, laser burn map, rotary cylinder), a tool library (flat, ball, V-bit, engraver, drill)
+> with per-T-number assignment, checks for rapids that gouge uncut stock, collet/holder collisions, cuts
+> deeper than the flutes and small islands left behind, and export of the result (STL / PNG).
+> Phase 5 added a parametric 3D model of your machine (router, laser, combo, rotary;
 > moving gantry or moving table) that moves with the job or the live machine, playback that follows
 > acceleration, and checks for moves outside the travel, cuts below the stock and rapids through it.
 > Phase 4 added a 3D toolpath viewer (colour by move type, feed, depth or power; live
@@ -13,8 +17,7 @@ machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 > a travel check in pre-flight. From Phase 2: Machine profiles and setup wizard, a built-in virtual GRBL controller, job
 > streaming (character counting) with pause/resume/stop and check mode, pre-flight checks, jogging,
 > homing, zeroing, work offsets, overrides, and a `$$` settings editor that compares the controller with
-> your profile. The G-code engine (accurate time estimates, bounds checks), 3D view and simulation come
-> next. Treat it as beta: test on air or scrap before trusting it with real work.
+> your profile. Treat it as beta: test on air or scrap before trusting it with real work.
 
 **Safety:** the on-screen STOP is a software feed-hold + reset. It is **not** an emergency stop. Always keep a
 hardware E-stop within reach.
@@ -109,6 +112,10 @@ flowchart TB
   GRBL 0.9 format), `firmware.rs`.
 - **Machine simulation** — `src/features/viewer/MachineModel.tsx` (parametric model + kinematics),
   `src/lib/sim/` (stock/tool setup, collision and limit checks).
+- **Material removal** — `src/lib/sim/removal.ts` (heightmap / burn / cylinder engine with problem
+  detection), `sim.worker.ts` + `client.ts` (keyframes, incremental patches), `src/store/removal.ts`
+  (sync with playback), `src/features/viewer/RemovalView.tsx` (meshes), `src/lib/sim/export.ts` (STL / PNG),
+  `src/lib/sim/tools.ts` (tool library).
 - **3D viewer** — `src/features/viewer/`: react-three-fiber scene; one shader-coloured `LineSegments` draw
   call built in the worker (`src/lib/gcode/render.ts`), playback state in `src/store/sim.ts`.
 - **G-code engine** — `src/lib/gcode/`: modal interpreter → typed-array toolpath → planner (time) → stats,

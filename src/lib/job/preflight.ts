@@ -15,6 +15,7 @@ import { machineBounds } from '@/lib/profile/geometry';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength } from '@/lib/profile/units';
 import type { CheckResult } from '@/lib/sim/checks';
+import type { SimEvent } from '@/lib/sim/removal';
 import type { StockSetup } from '@/lib/sim/setup';
 
 /** Collision/limit check results for the current stock (Phase 5). */
@@ -48,9 +49,11 @@ export interface PreflightInput {
   analysis?: AnalysisResult | null;
   analysisStatus?: 'idle' | 'running' | 'done' | 'error';
   sim?: SimContext | null;
+  /** Problems found by the material-removal simulation (Phase 6), when it has run */
+  removal?: SimEvent[] | null;
 }
 
-export function preflight({ scan, profile, controller, status, mode, analysis, analysisStatus, sim }: PreflightInput): PreflightCheck[] {
+export function preflight({ scan, profile, controller, status, mode, analysis, analysisStatus, sim, removal }: PreflightInput): PreflightCheck[] {
   const out: PreflightCheck[] = [];
   const f = scan.features;
   const add = (c: PreflightCheck) => out.push(c);
@@ -148,7 +151,12 @@ export function preflight({ scan, profile, controller, status, mode, analysis, a
   } else if (analysisStatus === 'error' || !analysis) {
     add({ id: 'analysis', level: 'warn', title: 'The job could not be analysed', detail: 'Bounds could not be checked. Check the job fits your machine.' });
   } else {
-    for (const c of analysisChecks(analysis, profile, status, mode, sim ?? undefined)) add(c);
+    for (const c of analysisChecks(analysis, profile, status, mode, sim ?? undefined)) {
+      // The removal simulation knows which material is already cut: its gouge check supersedes this one.
+      if (c.id === 'rapid-stock' && removal) continue;
+      add(c);
+    }
+    if (removal) for (const c of removalChecks(removal)) add(c);
   }
   return out;
 }
@@ -239,7 +247,7 @@ Rapids at full speed through material break bits. Check the safe/clearance heigh
       id: 'stock',
       level: 'info',
       title: `Checked against stock ${formatLength(sz.x, units, 1)} × ${formatLength(sz.y, units, 1)} × ${formatLength(sz.z, units, 1)} ${u}, work zero at the ${ORIGIN_LABEL[sim.stock.origin]}`,
-      detail: 'Change it under “Stock & tool” in the 3D view if that is not your stock.',
+      detail: 'Change it under “Stock & tools” in the 3D view if that is not your stock.',
     });
   }
   const size = (i: number) => formatLength(st.cutBounds.max[i]! - st.cutBounds.min[i]!, units, 1);
@@ -253,5 +261,33 @@ Rapids at full speed through material break bits. Check the safe/clearance heigh
   if (st.feedRange && st.feedRange[1] > maxRate * 1.001) {
     out.push({ id: 'feedmax', level: 'info', title: `Feed up to ${Math.round(st.feedRange[1])} mm/min is above the machine maximum (${Math.round(maxRate)})`, detail: 'The controller limits it to the maximum, so the job will take longer than CAM says.' });
   }
+  return out;
+}
+
+/** Pre-flight lines from the material-removal simulation. */
+export function removalChecks(events: SimEvent[]): PreflightCheck[] {
+  const out: PreflightCheck[] = [];
+  const of = (k: SimEvent['kind']) => events.filter((e) => e.kind === k);
+  const lines = (es: SimEvent[]) => {
+    const ls = [...new Set(es.map((e) => e.line).filter((l) => l > 0))].sort((a, b) => a - b);
+    return ls.slice(0, 8).join(', ') + (ls.length > 8 ? ', …' : '');
+  };
+  const gouge = of('rapid-gouge');
+  if (gouge.length) {
+    out.push({ id: 'sim-gouge', level: 'warn', title: `Rapid moves cut material (lines ${lines(gouge)})`, detail: 'The simulation found rapids that go through stock that has not been cut away yet. Check the safe/clearance height in your CAM, the stock size and the Z zero.' });
+  }
+  const holder = of('holder');
+  if (holder.length) {
+    out.push({ id: 'sim-holder', level: 'warn', title: `Collet / tool holder would hit the material (lines ${lines(holder)})`, detail: 'The cut is deeper than the tool sticks out of the holder. Use a longer stick-out or check the tool in the tool library.' });
+  }
+  const flute = of('flute');
+  if (flute.length) {
+    out.push({ id: 'sim-flute', level: 'warn', title: `Cuts deeper than the flute length (lines ${lines(flute)})`, detail: 'The shank above the flutes would rub on the walls. Check the tool assignment in “Stock & tools”.' });
+  }
+  const islands = of('island');
+  if (islands.length) {
+    out.push({ id: 'sim-island', level: 'info', title: `${islands.length} small island(s) of material left inside cut areas`, detail: 'Often a stepover that is too large or a missed finishing pass. Shown in yellow in the 3D view.' });
+  }
+  if (!out.length) out.push({ id: 'sim-ok', level: 'ok', title: 'Material simulation found no gouges, holder or flute problems' });
   return out;
 }

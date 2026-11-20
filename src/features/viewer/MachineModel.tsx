@@ -151,7 +151,8 @@ export function TableGroup({ layout, analysis, profile, children }: { layout: Ma
   const ref = useRef<THREE.Group>(null);
   useFrame(() => {
     if (!ref.current) return;
-    if (!layout.movingTable) {
+    // Without the machine drawn there is no fixed spindle to slide under: keep the job still.
+    if (!layout.movingTable || !useSim.getState().showMachine) {
       ref.current.position.y = 0;
       return;
     }
@@ -175,7 +176,7 @@ export function StockBody({ stock, profile }: { stock: StockSetup; profile: Mach
   return <Block min={box.min} max={box.max} material={material} />;
 }
 
-export function MachineFrame({ layout, profile, analysis, tool }: { layout: MachineLayout; profile: MachineProfile; analysis: AnalysisResult | null; tool: ToolSetup }) {
+export function MachineFrame({ layout, profile, analysis, tool, hideStock = false }: { layout: MachineLayout; profile: MachineProfile; analysis: AnalysisResult | null; tool: ToolSetup; hideStock?: boolean }) {
   const gantry = useRef<THREE.Group>(null);
   const xCarriage = useRef<THREE.Group>(null);
   const zGroup = useRef<THREE.Group>(null);
@@ -280,12 +281,12 @@ export function MachineFrame({ layout, profile, analysis, tool }: { layout: Mach
                 <boxGeometry args={[14, 8, 8]} />
               </mesh>
             ))}
-            <mesh position={[(box.x0 + box.x1) / 2, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <mesh position={[(box.x0 + box.x1) / 2, 0, 0]} rotation={[0, 0, Math.PI / 2]} visible={!hideStock}>
               <cylinderGeometry args={[dia / 2, dia / 2, box.x1 - box.x0, 48]} />
               <meshStandardMaterial color={profile.defaults.stock.color} transparent opacity={0.45} roughness={0.9} />
             </mesh>
             {/* reference stripe so rotation is visible */}
-            <mesh position={[(box.x0 + box.x1) / 2, 0, dia / 2 + 0.3]}>
+            <mesh position={[(box.x0 + box.x1) / 2, 0, dia / 2 + 0.3]} visible={!hideStock}>
               <boxGeometry args={[box.x1 - box.x0, 2, 0.6]} />
               <meshBasicMaterial color="#ef4444" />
             </mesh>
@@ -310,7 +311,7 @@ export function TravelAndHome({ profile, wco }: { profile: MachineProfile; wco: 
       <lineSegments geometry={edges} position={[(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]}>
         <lineBasicMaterial color={soft ? '#f97316' : '#8b5cf6'} transparent opacity={0.6} />
       </lineSegments>
-      <Html position={[min[0], max[1], max[2]]} className="pointer-events-none select-none">
+      <Html zIndexRange={[20, 0]} position={[min[0], max[1], max[2]]} className="pointer-events-none select-none">
         <span className="text-[10px] whitespace-nowrap" style={{ color: soft ? '#f97316' : '#8b5cf6' }}>
           {soft ? 'soft limits' : 'travel'}
         </span>
@@ -321,7 +322,7 @@ export function TravelAndHome({ profile, wco }: { profile: MachineProfile; wco: 
             <sphereGeometry args={[3, 16, 16]} />
             <meshBasicMaterial color="#22c55e" />
           </mesh>
-          <Html center position={[0, 0, 8]} className="pointer-events-none select-none">
+          <Html zIndexRange={[20, 0]} center position={[0, 0, 8]} className="pointer-events-none select-none">
             <span className="text-[10px] font-semibold text-green-500">home</span>
           </Html>
         </group>

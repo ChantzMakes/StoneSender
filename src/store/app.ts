@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { create } from 'zustand';
 import { backend } from '@/lib/backend';
+import { defaultTools, ToolSchema } from '@/lib/sim/tools';
 
 const AppSettingsSchema = z.object({
   version: z.literal(1).default(1),
@@ -43,6 +44,10 @@ const AppSettingsSchema = z.object({
     )
     .default([]),
   centerTab: z.enum(['view', 'editor']).default('view'),
+  /** Tool library (shared across profiles) */
+  tools: z.array(ToolSchema).default(() => defaultTools()),
+  /** Simulation grid resolution in mm (0 = automatic) */
+  simResolution: z.number().min(0).max(5).default(0),
 });
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

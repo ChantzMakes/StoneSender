@@ -360,3 +360,66 @@ export function niceStep(span: number, target = 8): number {
   const m = raw / p;
   return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
 }
+
+// ---------------------------------------------------------------------------
+// Segment geometry helpers (shared with the material-removal simulator)
+// ---------------------------------------------------------------------------
+
+/** Start point of segment i (x, y, z, a). */
+export function segStartPoint(tp: Toolpath, i: number, out: number[] = [0, 0, 0, 0]): number[] {
+  const src = i === 0 ? tp.origin : tp.end;
+  const o = i === 0 ? 0 : (i - 1) * 4;
+  for (let k = 0; k < 4; k++) out[k] = src[o + k]!;
+  return out;
+}
+
+/** Length of segment i along its path (arcs: true arc length incl. helix; A counts as mm). */
+export function segLength(tp: Toolpath, i: number): number {
+  const s = segStartPoint(tp, i);
+  const e = [tp.end[i * 4]!, tp.end[i * 4 + 1]!, tp.end[i * 4 + 2]!, tp.end[i * 4 + 3]!];
+  const k = tp.kind[i]!;
+  if (k === SEG.arcCw || k === SEG.arcCcw) {
+    const a = tp.arcRef[i]! * ARC_FIELDS;
+    const [a0, a1, lin] = PLANES[tp.arcs[a + 4]!]!;
+    const r = Math.hypot(s[a0]! - tp.arcs[a + a0]!, s[a1]! - tp.arcs[a + a1]!);
+    return Math.hypot(Math.abs(tp.arcs[a + 3]!) * r, e[lin]! - s[lin]!);
+  }
+  return Math.hypot(e[0]! - s[0]!, e[1]! - s[1]!, e[2]! - s[2]!, e[3]! - s[3]!);
+}
+
+/** Path fraction (0–1) of segment i reached at planned time t, following its speed profile. */
+export function fractionAt(tp: Toolpath, segEnd: Float64Array, i: number, t: number): number {
+  const dur = tp.duration[i]!;
+  if (dur <= 0) return t >= segEnd[i]! ? 1 : 0;
+  const timeFrac = Math.min(1, Math.max(0, (t - (segEnd[i]! - dur)) / dur));
+  const m = i * MOTION_FIELDS;
+  return pathFraction(timeFrac, segLength(tp, i), tp.motion[m]!, tp.motion[m + 1]!, tp.motion[m + 2]!, tp.motion[m + 3]!);
+}
+
+/** Point at path fraction f of segment i (writes x, y, z, a into `out`). */
+export function pointOnSegment(tp: Toolpath, i: number, f: number, start: number[], out: number[]): number[] {
+  const e0 = tp.end[i * 4]!,
+    e1 = tp.end[i * 4 + 1]!,
+    e2 = tp.end[i * 4 + 2]!,
+    e3 = tp.end[i * 4 + 3]!;
+  const k = tp.kind[i]!;
+  if (k === SEG.arcCw || k === SEG.arcCcw) {
+    const a = tp.arcRef[i]! * ARC_FIELDS;
+    const c = [tp.arcs[a]!, tp.arcs[a + 1]!, tp.arcs[a + 2]!];
+    const th = tp.arcs[a + 3]! * f;
+    const [a0, a1, lin] = PLANES[tp.arcs[a + 4]!]!;
+    const r0 = start[a0]! - c[a0]!;
+    const r1 = start[a1]! - c[a1]!;
+    const e = [e0, e1, e2];
+    out[a0] = c[a0]! + r0 * Math.cos(th) - r1 * Math.sin(th);
+    out[a1] = c[a1]! + r0 * Math.sin(th) + r1 * Math.cos(th);
+    out[lin] = start[lin]! + (e[lin]! - start[lin]!) * f;
+    out[3] = start[3]! + (e3 - start[3]!) * f;
+  } else {
+    out[0] = start[0]! + (e0 - start[0]!) * f;
+    out[1] = start[1]! + (e1 - start[1]!) * f;
+    out[2] = start[2]! + (e2 - start[2]!) * f;
+    out[3] = start[3]! + (e3 - start[3]!) * f;
+  }
+  return out;
+}

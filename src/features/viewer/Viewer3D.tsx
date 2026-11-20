@@ -1,6 +1,6 @@
 /** 3D toolpath viewer: canvas, toolbar, legend and playback scrubber. */
 import { Canvas } from '@react-three/fiber';
-import { Box, Cog, Maximize, Crosshair, Eye, EyeOff, Grid3x3, LocateFixed, Package, Pause, Play, Ruler, Settings2, SkipBack, SkipForward } from 'lucide-react';
+import { Box, Cog, Maximize, Crosshair, Eye, EyeOff, Flag, Grid3x3, Layers, LocateFixed, Package, Pause, Play, Route, Ruler, Settings2, SkipBack, SkipForward } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, Tip } from '@/components/ui/primitives';
@@ -13,10 +13,12 @@ import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
 import { useAnalysis } from '@/store/analysis';
 import { useApp } from '@/store/app';
 import { isActivePhase, useLink } from '@/store/link';
+import { useRemovalSync } from '@/store/removal';
 import { type ColorMode, SPEEDS, useSim } from '@/store/sim';
 import { formatDuration } from '../job/format';
 import { machineLayout } from './MachineModel';
 import { Scene, type Palette, type ViewBounds } from './Scene';
+import { RemovalPanel } from './RemovalPanel';
 import { StockDialog } from './StockDialog';
 import { useSimSetup, useSimWco } from './useSimSetup';
 
@@ -167,6 +169,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
   const [stockOpen, setStockOpen] = useState(false);
   const { stock, tool } = useSimSetup(profile);
   const { wco: simWco, assumed } = useSimWco(profile, stock);
+  useRemovalSync(profile, stock);
   const wcoKey = simWco.map((v) => v.toFixed(3)).join(',');
   // Recompute only when the placement actually changes, not on every status report.
   const layout = useMemo(() => machineLayout(profile, simWco, tool), [profile, wcoKey, tool]);
@@ -234,7 +237,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
         )}
 
         {/* toolbar */}
-        <div className="absolute top-2 right-2 flex flex-wrap items-center justify-end gap-0.5 rounded-md border bg-card/85 p-0.5 backdrop-blur">
+        <div className="absolute top-2 right-2 z-30 flex flex-wrap items-center justify-end gap-0.5 rounded-md border bg-card/85 p-0.5 backdrop-blur">
           {(['top', 'front', 'side', 'iso'] as const).map((v) => (
             <Button key={v} size="sm" variant="ghost" className="h-7 px-2 text-xs capitalize" onClick={() => sim.requestView(v)} data-testid={`view-${v}`}>
               {v === 'iso' ? '3D' : v}
@@ -249,6 +252,19 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
           {btn('Machine travel box and home', () => sim.set({ showEnvelope: !sim.showEnvelope }), <Crosshair />, sim.showEnvelope)}
           {btn(sim.showMachine ? 'Hide machine' : 'Show machine', () => sim.set({ showMachine: !sim.showMachine }), <Cog />, sim.showMachine, 'toggle-machine')}
           {btn(sim.showStock ? 'Hide stock' : 'Show stock', () => sim.set({ showStock: !sim.showStock }), <Package />, sim.showStock)}
+          {btn(sim.showRemoval ? 'Hide material removal' : 'Simulate material removal', () => sim.set({ showRemoval: !sim.showRemoval }), <Layers />, sim.showRemoval, 'toggle-removal')}
+          {btn(sim.showToolpath ? 'Hide toolpath' : 'Show toolpath', () => sim.set({ showToolpath: !sim.showToolpath }), <Route />, !sim.showToolpath, 'toggle-toolpath')}
+          {btn(
+            'Show the finished result',
+            () => {
+              if (!analysis) return;
+              const total = analysis.stats.time.total;
+              sim.set({ playing: false, time: total, line: sampleAt(analysis.toolpath, analysis.render.segEnd, total).line });
+            },
+            <Flag />,
+            false,
+            'view-result',
+          )}
           {btn('Stock & tool settings', () => setStockOpen(true), <Settings2 />, false, 'stock-settings')}
           {btn(sim.measuring ? 'Stop measuring' : 'Measure: click two points', () => sim.set({ measuring: !sim.measuring, measure: [] }), <Ruler />, sim.measuring, 'toggle-measure')}
           <div className="w-52">
@@ -257,7 +273,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
         </div>
 
         {/* info + legend */}
-        <div className="pointer-events-none absolute bottom-2 left-2 flex flex-col gap-1 rounded-md bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur" data-testid="viewer-info">
+        <div className="pointer-events-none absolute bottom-2 left-2 z-30 flex flex-col gap-1 rounded-md bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur" data-testid="viewer-info">
           <span>
             Machine travel {formatLength(env.x, units, 0)} × {formatLength(env.y, units, 0)} × {formatLength(env.z, units, 0)} {unitLabel('length', units)}
             {!connected && ' · connect to place it around your work zero'}
@@ -272,7 +288,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
           <Legend profile={profile} />
         </div>
         {checks && (checks.travel.length > 0 || checks.belowStock || checks.rapidsThroughStockCount > 0) && (
-          <div className="pointer-events-none absolute top-12 right-2 flex max-w-xs flex-col gap-0.5 rounded-md border border-destructive/40 bg-card/90 px-2 py-1 text-[11px] backdrop-blur" data-testid="sim-problems">
+          <div className="pointer-events-none absolute top-12 right-2 z-30 flex max-w-xs flex-col gap-0.5 rounded-md border border-destructive/40 bg-card/90 px-2 py-1 text-[11px] backdrop-blur" data-testid="sim-problems">
             {checks.travel.length > 0 && <span className="text-red-500">● Leaves the machine travel ({checks.travel.map((t) => `${t.axis}${t.side === 'max' ? '+' : '−'}`).join(', ')}) from line {checks.travel[0]!.line}</span>}
             {checks.belowStock && (
               <span className="text-fuchsia-400">
@@ -283,6 +299,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
             {assumed && <span className="text-muted-foreground">Travel checked against an assumed work zero.</span>}
           </div>
         )}
+        {analysis && <RemovalPanel profile={profile} stockColor={stock.color} />}
         {!analysis && status !== 'running' && <div className="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-muted-foreground">Open a G-code file to see its toolpath.</div>}
         {status === 'running' && <div className="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-muted-foreground">Preparing the toolpath…</div>}
       </div>

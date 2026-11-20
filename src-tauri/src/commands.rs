@@ -7,7 +7,7 @@ use grbl_core::gcode_prep::{prepare, FirmwareCaps, JobScan};
 use grbl_core::profile::MachineProfile;
 use grbl_core::transport::{PortInfo, TransportFactory};
 use grbl_link::serial::{list_ports as list_serial_ports, SerialFactory};
-use grbl_link::{JobMode, LinkOptions, LinkSnapshot};
+use grbl_link::{JobMode, JobOptions, LinkOptions, LinkSnapshot, ToolChangeMode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -85,6 +85,13 @@ pub fn link_disconnect(state: State<'_, AppState>) {
 #[tauri::command]
 pub fn link_send_line(state: State<'_, AppState>, line: String) -> Result<(), String> {
     state.link.send_line(&line).map_err(|e| e.to_string())
+}
+
+/// Queue a line and get a `commandAck` event with the same id when the
+/// controller answers (or `dropped` if it never will).
+#[tauri::command]
+pub fn link_send_tracked(state: State<'_, AppState>, line: String, id: u64) -> Result<(), String> {
+    state.link.send_tracked(&line, id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -280,8 +287,20 @@ pub fn job_load_text(state: State<'_, AppState>, name: String, text: String) -> 
     Ok(LoadedJob { name, path: String::new(), size_bytes: size, scan })
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct JobStartOptions {
+    /// Start from this source line (1-based); earlier lines are skipped
+    pub from_line: Option<u32>,
+    /// Recovery lines sent before the first job line
+    pub prelude: Vec<String>,
+    /// "pause" (guided tool change at M6) or "skip" (profile ignores M6)
+    pub tool_change: Option<String>,
+}
+
 #[tauri::command]
-pub fn job_start(state: State<'_, AppState>, mode: String) -> Result<(), String> {
+pub fn job_start(state: State<'_, AppState>, mode: String, options: Option<JobStartOptions>) -> Result<(), String> {
+    let options = options.unwrap_or_default();
     let (name, text) = state.job_source.lock().map_err(|e| e.to_string())?.clone().ok_or("no job loaded")?;
     let (lines, scan) = prepare(&text, &current_caps(&state));
     if scan.has_errors() {
@@ -291,7 +310,21 @@ pub fn job_start(state: State<'_, AppState>, mode: String) -> Result<(), String>
         return Err("the job has nothing to send".into());
     }
     let mode = if mode == "check" { JobMode::Check } else { JobMode::Run };
-    state.link.start_job(name, lines, mode).map_err(|e| e.to_string())
+    let lines = match options.from_line {
+        Some(from) if from > 1 => {
+            if mode == JobMode::Check {
+                return Err("start from a line only applies to a run".into());
+            }
+            let rest: Vec<_> = lines.into_iter().filter(|l| l.source_line >= from).collect();
+            if rest.is_empty() {
+                return Err(format!("nothing to send from line {from}"));
+            }
+            rest
+        }
+        _ => lines,
+    };
+    let tool_change = if options.tool_change.as_deref() == Some("skip") { ToolChangeMode::Skip } else { ToolChangeMode::Pause };
+    state.link.start_job_with(name, lines, mode, JobOptions { prelude: options.prelude, tool_change }).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -302,6 +335,11 @@ pub fn job_pause(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn job_resume(state: State<'_, AppState>) -> Result<(), String> {
     state.link.resume_job().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn job_tool_change_done(state: State<'_, AppState>) -> Result<(), String> {
+    state.link.tool_change_done().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

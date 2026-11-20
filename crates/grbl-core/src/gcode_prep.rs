@@ -29,7 +29,11 @@ pub struct Issue {
 pub struct PreparedLine {
     /// 1-based line number in the original file
     pub source_line: u32,
+    /// Text to send. M6 is removed (tool changes are handled by the app), so
+    /// a line that held only `M6` is empty.
     pub text: String,
+    /// Set when the source line contained M6
+    pub tool_change: Option<ToolChange>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -170,10 +174,11 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
             }
             scan.lines += 1;
             scan.bytes += text.len() as u64 + 1;
-            lines.push(PreparedLine { source_line: n, text });
+            lines.push(PreparedLine { source_line: n, text, tool_change: None });
             continue;
         }
         let mut is_motion = false;
+        let mut m6_words: Vec<(usize, usize)> = Vec::new();
         let mut has_s = false;
         let mut has_m6 = false;
         let mut t_word = None;
@@ -182,6 +187,7 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
         let mut i = 0;
         while i < bytes.len() {
             let letter = bytes[i] as char;
+            let word_start = i;
             if !letter.is_ascii_alphabetic() {
                 issue(&mut scan, n, Severity::Error, "syntax", format!("unexpected character '{letter}' (variables and expressions are not supported by GRBL)"));
                 bad = true;
@@ -232,7 +238,10 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
                         spindle_started_line = Some(n);
                     }
                     5 | 9 => {}
-                    6 => has_m6 = true,
+                    6 => {
+                        has_m6 = true;
+                        m6_words.push((word_start, i));
+                    }
                     7 => {
                         scan.features.coolant_mist = true;
                         if !caps.supports_m7 {
@@ -266,8 +275,15 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
                 scan.features.tools.push(t);
             }
         }
+        let mut tool_change = None;
+        let mut text = text;
         if has_m6 {
-            scan.features.tool_changes.push(ToolChange { line: n, tool: t_word });
+            let tc = ToolChange { line: n, tool: t_word };
+            tool_change = Some(tc.clone());
+            for &(a, b) in m6_words.iter().rev() {
+                text.replace_range(a..b, "");
+            }
+            scan.features.tool_changes.push(tc);
             if !caps.supports_m6 {
                 issue(&mut scan, n, Severity::Info, "tool-change", "M6 tool change: GRBL 1.1 rejects M6; the app handles it according to your profile's tool change setting".into());
             }
@@ -280,7 +296,7 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
         }
         scan.lines += 1;
         scan.bytes += text.len() as u64 + 1;
-        lines.push(PreparedLine { source_line: n, text });
+        lines.push(PreparedLine { source_line: n, text, tool_change });
     }
     (lines, scan)
 }
@@ -301,11 +317,24 @@ mod tests {
         let src = "(header)\nG21 G90\n\nG0 X1 Y2\nM3 S1000\nG4 P2\nG1 X5 F100\nM30\n";
         let (lines, scan) = prepare(src, &FirmwareCaps::GRBL11);
         assert_eq!(lines.len(), 6);
-        assert_eq!(lines[0], PreparedLine { source_line: 2, text: "G21G90".into() });
+        assert_eq!(lines[0], PreparedLine { source_line: 2, text: "G21G90".into(), tool_change: None });
         assert_eq!(scan.lines, 6);
         assert!(scan.features.units_mm && scan.features.spindle_cw && scan.features.program_end);
         assert!(scan.features.dwell_after_spindle);
         assert_eq!(scan.features.max_s, 1000.0);
+        assert!(!scan.has_errors());
+    }
+
+    #[test]
+    fn removes_m6_and_marks_tool_changes() {
+        let (lines, scan) = prepare("T2 M6
+M06
+G0 Z5 M6 T3
+", &FirmwareCaps::GRBL11);
+        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), vec!["T2", "", "G0Z5T3"]);
+        assert_eq!(lines[0].tool_change, Some(ToolChange { line: 1, tool: Some(2) }));
+        assert_eq!(lines[1].tool_change, Some(ToolChange { line: 2, tool: None }));
+        assert_eq!(scan.features.tool_changes.len(), 3);
         assert!(!scan.has_errors());
     }
 

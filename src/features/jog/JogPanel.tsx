@@ -25,7 +25,8 @@ type Dir = [number, number, number];
 export function useJogAvailable(): boolean {
   const connected = useLink((s) => s.state === 'connected');
   const state = useLink((s) => s.status?.state?.name);
-  const jobActive = useLink((s) => isActivePhase(s.job?.phase));
+  // Jogging is allowed while a job waits for a tool change (to position over the touch plate).
+  const jobActive = useLink((s) => isActivePhase(s.job?.phase) && s.job?.phase !== 'tool-change');
   return connected && (state === 'idle' || state === 'jog') && !jobActive;
 }
 

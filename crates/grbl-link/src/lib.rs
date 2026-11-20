@@ -7,5 +7,5 @@ pub mod link;
 pub mod sender;
 pub mod serial;
 
-pub use link::{ControllerInfo, EventSink, Link, LinkError, LinkEvent, LinkOptions, LinkSnapshot, LinkState};
-pub use sender::{JobMode, JobPhase, JobProgress};
+pub use link::{ControllerInfo, EventSink, JobOptions, Link, LinkError, LinkEvent, LinkOptions, LinkSnapshot, LinkState};
+pub use sender::{JobMode, JobPhase, JobProgress, ToolChangeMode};

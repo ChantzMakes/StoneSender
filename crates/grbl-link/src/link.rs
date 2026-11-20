@@ -21,7 +21,7 @@
 //! * Stopping a job: feed hold now, soft reset once the machine reports
 //!   Hold:0/Idle/Alarm or after `STOP_RESET_TIMEOUT` at the latest.
 
-use crate::sender::{AckEvent, Engine, Job, JobMode, JobPhase, JobProgress, Origin, Outgoing};
+use crate::sender::{AckEvent, Engine, Job, JobMode, JobPhase, JobProgress, Origin, Outgoing, ToolChangeMode};
 use grbl_core::firmware::{parse_legacy_build, parse_welcome, BuildInfo, FirmwareInfo};
 use grbl_core::gcode_prep::PreparedLine;
 use grbl_core::protocol::{parse_line, GrblLine};
@@ -85,6 +85,17 @@ pub enum LinkEvent {
     Queue { pending: usize, in_flight: bool, dropped: usize },
     Controller { info: ControllerInfo },
     Job { progress: JobProgress },
+    /// A tracked command (`send_tracked`) was acknowledged — or dropped
+    /// (reset, alarm, disconnect) and will never be.
+    CommandAck { id: u64, error: Option<u16>, message: Option<String>, dropped: bool },
+}
+
+/// Options for `Link::start_job`.
+#[derive(Debug, Clone, Default)]
+pub struct JobOptions {
+    /// Recovery lines sent one at a time before the job (start from line)
+    pub prelude: Vec<String>,
+    pub tool_change: ToolChangeMode,
 }
 
 pub trait EventSink: Send + Sync {
@@ -191,6 +202,12 @@ impl Shared {
         }
     }
 
+    fn emit_dropped(&self, ids: &[u64]) {
+        for &id in ids {
+            self.sink.emit(LinkEvent::CommandAck { id, error: None, message: None, dropped: true });
+        }
+    }
+
     fn flush(&self, reason: &str) {
         let now = Instant::now();
         let (result, progress) = {
@@ -198,6 +215,7 @@ impl Shared {
             let r = e.flush(reason, now);
             (r, e.job.as_ref().map(|j| j.progress(now)))
         };
+        self.emit_dropped(&result.dropped_ids);
         if result.dropped_commands > 0 || result.job_ended.is_some() {
             self.sink.emit(LinkEvent::Queue { pending: 0, in_flight: false, dropped: result.dropped_commands });
         }
@@ -219,6 +237,7 @@ impl Shared {
             let r = e.flush(reason, now);
             (r, e.job.as_ref().map(|j| j.progress(now)))
         };
+        self.emit_dropped(&result.dropped_ids);
         self.sink.emit(LinkEvent::Queue { pending: 0, in_flight: false, dropped: result.dropped_commands });
         if let (Some(_), Some(p)) = (result.job_ended, progress) {
             self.snapshot.lock().expect("snapshot lock").job = Some(p.clone());
@@ -364,6 +383,16 @@ impl Link {
 
     /// Queue one interactive line (console, buttons, jog steps).
     pub fn send_line(&self, line: &str) -> Result<(), LinkError> {
+        self.queue_line(line, None)
+    }
+
+    /// Queue a line and report its acknowledgement as `LinkEvent::CommandAck { id }`
+    /// (used by probing and tool-change routines that must wait for each step).
+    pub fn send_tracked(&self, line: &str, id: u64) -> Result<(), LinkError> {
+        self.queue_line(line, Some(id))
+    }
+
+    fn queue_line(&self, line: &str, id: Option<u64>) -> Result<(), LinkError> {
         let (max_queue, max_len) = {
             let active = self.active.lock().expect("active lock");
             let a = active.as_ref().ok_or(LinkError::NotConnected)?;
@@ -375,7 +404,10 @@ impl Link {
             let mut e = shared.engine();
             if let Some(job) = e.job.as_ref().filter(|j| j.phase.is_active()) {
                 let paused = matches!(job.phase, JobPhase::Paused | JobPhase::PausedOnError);
-                if !paused || !READ_ONLY.contains(&line.as_str()) {
+                // During a guided tool change the UI moves the machine (retract, go to
+                // the change position, probe); settings writes stay blocked.
+                let tool_change_ok = job.phase == JobPhase::ToolChange && !(line.starts_with('$') && line.contains('=') && !line.starts_with("$J="));
+                if !tool_change_ok && (!paused || !READ_ONLY.contains(&line.as_str())) {
                     return Err(LinkError::Busy(if paused {
                         "a job is paused — only read-only queries ($$, $#, $G, $I) are allowed until it is resumed or stopped".into()
                     } else {
@@ -389,7 +421,10 @@ impl Link {
             if e.pending_commands() >= max_queue {
                 return Err(LinkError::QueueFull(max_queue));
             }
-            e.queue_command(line);
+            match id {
+                Some(id) => e.queue_tracked(line, id),
+                None => e.queue_command(line),
+            }
         }
         shared.kick();
         Ok(())
@@ -432,6 +467,15 @@ impl Link {
     // ----- jobs ---------------------------------------------------------------
 
     pub fn start_job(&self, name: String, lines: Vec<PreparedLine>, mode: JobMode) -> Result<(), LinkError> {
+        self.start_job_with(name, lines, mode, JobOptions::default())
+    }
+
+    pub fn start_job_with(&self, name: String, lines: Vec<PreparedLine>, mode: JobMode, opts: JobOptions) -> Result<(), LinkError> {
+        let max_len = self.active.lock().expect("active lock").as_ref().map(|a| a.max_line_len).ok_or(LinkError::NotConnected)?;
+        let prelude = opts.prelude.iter().map(|l| validate_line(l, max_len)).collect::<Result<Vec<_>, _>>()?;
+        if prelude.iter().any(|l| l.starts_with('$') && !l.starts_with("$J=")) {
+            return Err(LinkError::InvalidLine("recovery lines may not contain $ commands".into()));
+        }
         let shared = self.shared()?;
         match shared.status_state() {
             Some(MachineState::Idle) => {}
@@ -446,7 +490,7 @@ impl Link {
             if e.jogging() || e.pending_commands() > 0 || e.in_flight_len() > 0 {
                 return Err(LinkError::Busy("wait for pending commands to finish".into()));
             }
-            e.start_job(Job::new(name, lines, mode, Instant::now()));
+            e.start_job(Job::new(name, lines, mode, Instant::now()).with_prelude(prelude).with_tool_change_mode(opts.tool_change));
         }
         shared.kick();
         Ok(())
@@ -484,6 +528,22 @@ impl Link {
         Ok(())
     }
 
+    /// The guided tool change is finished; the job continues.
+    pub fn tool_change_done(&self) -> Result<(), LinkError> {
+        let shared = self.shared()?;
+        {
+            let mut e = shared.engine();
+            if e.jogging() || e.pending_commands() > 0 || e.in_flight_len() > 0 {
+                return Err(LinkError::Busy("wait for the tool-change moves to finish".into()));
+            }
+            if !e.tool_change_done(Instant::now()) {
+                return Err(LinkError::Busy("the job is not waiting for a tool change".into()));
+            }
+        }
+        shared.kick();
+        Ok(())
+    }
+
     pub fn stop_job(&self) -> Result<(), LinkError> {
         let shared = self.shared()?;
         let mode = {
@@ -511,7 +571,7 @@ impl Link {
         }
         {
             let mut e = shared.engine();
-            if e.job_active() {
+            if e.job_active() && e.job_phase() != Some(JobPhase::ToolChange) {
                 return Err(LinkError::Busy("cannot jog while a job is active".into()));
             }
             e.jog_start(dir, feed, accel, Instant::now());
@@ -749,9 +809,14 @@ fn handle_line(shared: &Shared, tracker: &mut StatusTracker, raw: &[u8]) {
     }
     shared.sink.emit(LinkEvent::Rx { line: text, parsed, ts });
     if let Some(err) = is_ack {
-        let event = shared.engine().on_ack(err, now);
-        if matches!(event, AckEvent::JobErrorPaused(_)) {
-            shared.realtime(realtime::FEED_HOLD);
+        let event = shared.engine().on_ack(err.clone(), now);
+        match &event {
+            AckEvent::JobErrorPaused(_) => shared.realtime(realtime::FEED_HOLD),
+            AckEvent::Command { id: Some(id), error } => {
+                let message = err.and_then(|e| if e.1.is_empty() { None } else { Some(e.1) });
+                shared.sink.emit(LinkEvent::CommandAck { id: *id, error: *error, message, dropped: false });
+            }
+            _ => {}
         }
         if shared.controller_dirty.swap(false, Ordering::SeqCst) {
             let info = shared.snapshot.lock().expect("snapshot lock").controller.clone();
@@ -849,7 +914,7 @@ fn worker_loop(shared: Arc<Shared>, kick: mpsc::Receiver<()>, opts: LinkOptions)
                             log::warn!("write failed: {err}");
                             break;
                         }
-                        if matches!(origin, Origin::Command | Origin::JobControl) {
+                        if matches!(origin, Origin::Command(_) | Origin::JobControl) {
                             shared.sink.emit(LinkEvent::Tx { line: text, realtime: false, ts: now_ms() });
                         }
                     }

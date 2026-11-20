@@ -85,11 +85,14 @@ export function preflight({ scan, profile, controller, status, mode, analysis, a
     if (profile.toolChange.strategy === 'ignore') {
       add({ id: 'm6', level: 'warn', title: `${f.toolChanges.length} tool change(s) will be ignored`, detail: 'Your profile is set to ignore M6. The whole job runs with the bit that is in the spindle now.' });
     } else {
+      const setterMissing = profile.toolChange.strategy === 'tool-setter' && !profile.probe.toolSetter.enabled;
       add({
         id: 'm6',
-        level: 'block',
+        level: setterMissing ? 'block' : 'info',
         title: `${f.toolChanges.length} tool change(s) (M6)`,
-        detail: 'Guided tool changes arrive in a later update. For now, split the job into one file per tool (most CAM can do this), or set the profile’s tool change setting to “Ignore M6”.',
+        detail: setterMissing
+          ? 'Your profile uses the fixed tool setter, but no tool setter is set up. Add its position under Probe & touch plate, or pick another tool change setting.'
+          : 'The job stops before each M6 (everything before it finishes first) and guides you through the change. M6 itself is never sent to the controller.',
       });
     }
   }
@@ -116,7 +119,7 @@ export function preflight({ scan, profile, controller, status, mode, analysis, a
       });
     } else add({ id: 'power', level: 'ok', title: 'Spindle on/off commands present' });
     if (powerOn && !f.dwellAfterSpindle && profile.spindle.spinUpDelaySec > 0) {
-      add({ id: 'spinup', level: 'info', title: 'No pause after the spindle starts', detail: `Your profile asks for ${profile.spindle.spinUpDelaySec} s of spin-up. Automatic insertion arrives with the G-code engine; add a G4 P${profile.spindle.spinUpDelaySec} in CAM if your spindle needs it.` });
+      add({ id: 'spinup', level: 'info', title: 'No pause after the spindle starts', detail: `Your profile asks for ${profile.spindle.spinUpDelaySec} s of spin-up. The app adds that pause itself only when it restarts the spindle (start from a line, tool changes); add a G4 P${profile.spindle.spinUpDelaySec} in CAM if your spindle needs it at the start.` });
     }
     if (profile.spindle.type !== 'router' && f.maxS > profile.spindle.maxRpm) add({ id: 'smax', level: 'warn', title: `Spindle speed up to S${f.maxS}, profile maximum is ${profile.spindle.maxRpm}` });
   }

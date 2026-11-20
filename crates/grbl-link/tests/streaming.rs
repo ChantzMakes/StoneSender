@@ -123,7 +123,8 @@ fn send_response_mode_keeps_one_line_in_the_buffer() {
 #[test]
 fn error_mid_job_pauses_with_feed_hold_and_can_continue() {
     let (link, sink, _f) = ready(cfg(Flavor::Grbl11, 20.0), opts(true));
-    let src = "G21 G90\nG1 X-20 F3000\nM6 T2\nG1 X-40\nG1 X-60\nG0 X0\n";
+    // GRBL 1.1 rejects M7 (error:20); M6 is handled by the app now.
+    let src = "G21 G90\nG1 X-20 F3000\nM7\nG1 X-40\nG1 X-60\nG0 X0\n";
     let (lines, _) = prepare(src, &FirmwareCaps::GRBL11);
     link.start_job("err.nc".into(), lines, JobMode::Run).unwrap();
     let ev = sink.wait_for("paused on error", T, job_phase(&sink, JobPhase::PausedOnError));
@@ -191,7 +192,8 @@ fn alarm_mid_job_aborts() {
 #[test]
 fn check_mode_reports_errors_without_moving() {
     let (link, sink, factory) = ready(cfg(Flavor::Grbl11, 20.0), opts(true));
-    let (lines, _) = prepare("G21 G90\nG1 X-50 F1000\nG1 X-10 Y-10 Z-1 R5\nM6\nG0 X0\n", &FirmwareCaps::GRBL11);
+    // M7 is rejected by GRBL 1.1 (M6 is never sent any more).
+    let (lines, _) = prepare("G21 G90\nG1 X-50 F1000\nG1 X-10 Y-10 Z-1 R5\nM7\nG0 X0\n", &FirmwareCaps::GRBL11);
     link.start_job("check.nc".into(), lines, JobMode::Check).unwrap();
     let ev = sink.wait_for("completed", T, job_phase(&sink, JobPhase::Completed));
     let LinkEvent::Job { progress } = ev else { unreachable!() };

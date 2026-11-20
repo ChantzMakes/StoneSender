@@ -1,5 +1,5 @@
 /** Job panel: open a file, pre-flight, run/check, pause/resume/stop, progress. */
-import { FileUp, History, Pause, Play, ShieldCheck, Square, X } from 'lucide-react';
+import { FileUp, History, ListStart, Pause, Play, ShieldCheck, Square, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge, PanelTitle, Tip } from '@/components/ui/primitives';
@@ -15,6 +15,8 @@ import { formatDuration } from './format';
 import { JobHistoryDialog } from './JobHistoryDialog';
 import { JobStats } from './JobStats';
 import { PreflightDialog } from './PreflightDialog';
+import { type StartFrom, StartFromLineDialog } from './StartFromLineDialog';
+import { ToolChangePanel } from './ToolChangePanel';
 
 export { formatDuration };
 
@@ -25,6 +27,7 @@ const PHASE_LABEL: Record<string, { label: string; variant: 'info' | 'warning' |
   'paused-on-error': { label: 'Paused — error', variant: 'destructive' },
   finishing: { label: 'Finishing moves', variant: 'info' },
   stopping: { label: 'Stopping', variant: 'warning' },
+  'tool-change': { label: 'Tool change', variant: 'warning' },
   completed: { label: 'Completed', variant: 'success' },
   stopped: { label: 'Stopped', variant: 'secondary' },
   failed: { label: 'Failed', variant: 'destructive' },
@@ -41,6 +44,8 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const unloadJob = useLink((s) => s.unloadJob);
   const [preflightMode, setPreflightMode] = useState<JobMode | null>(null);
+  const [startFrom, setStartFrom] = useState<StartFrom | null>(null);
+  const [startLineOpen, setStartLineOpen] = useState(false);
   const active = isActivePhase(job?.phase);
 
   const act = (f: () => Promise<void>) => f().catch((e) => sysMessage(errorMessage(e), 'error'));
@@ -118,7 +123,14 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
 
         {loaded && !active && (
           <div className="grid grid-cols-2 gap-2">
-            <Button data-testid="run-job" disabled={!connected} onClick={() => setPreflightMode('run')}>
+            <Button
+              data-testid="run-job"
+              disabled={!connected}
+              onClick={() => {
+                setStartFrom(null);
+                setPreflightMode('run');
+              }}
+            >
               <Play /> Run
             </Button>
             <Tip content="Dry run: the controller checks every line ($C) without moving">
@@ -128,8 +140,13 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
                 </Button>
               </span>
             </Tip>
+            <Button variant="ghost" size="sm" className="col-span-2 h-7 text-xs" data-testid="start-from-line" disabled={!connected || !analysis} onClick={() => setStartLineOpen(true)}>
+              <ListStart /> Start from a line…
+            </Button>
           </div>
         )}
+
+        {job?.phase === 'tool-change' && <ToolChangePanel profile={profile} />}
 
         {job && (
           <div className="flex flex-col gap-2" data-testid="job-progress">
@@ -172,7 +189,7 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
               </ul>
             )}
             {job.message && !active && <p className="text-xs text-muted-foreground">{job.message}</p>}
-            {active && (
+            {active && job.phase !== 'tool-change' && (
               <div className="grid grid-cols-2 gap-2">
                 {job.phase === 'paused' || job.phase === 'paused-on-error' ? (
                   <Button data-testid="resume-job" onClick={() => void act(backend.jobResume)}>
@@ -191,7 +208,25 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
           </div>
         )}
       </div>
-      <PreflightDialog mode={preflightMode} profile={profile} onClose={() => setPreflightMode(null)} />
+      <PreflightDialog
+        mode={preflightMode}
+        profile={profile}
+        startFrom={startFrom}
+        onClose={() => {
+          setPreflightMode(null);
+          setStartFrom(null);
+        }}
+      />
+      <StartFromLineDialog
+        open={startLineOpen}
+        onOpenChange={setStartLineOpen}
+        profile={profile}
+        onContinue={(s) => {
+          setStartLineOpen(false);
+          setStartFrom(s);
+          setPreflightMode('run');
+        }}
+      />
       <JobHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
     </div>
   );

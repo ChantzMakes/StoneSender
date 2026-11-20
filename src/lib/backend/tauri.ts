@@ -35,6 +35,7 @@ export const tauriBackend: Backend = {
   connect: (req) => invoke('link_connect', { req }),
   disconnect: () => invoke('link_disconnect'),
   sendLine: (line) => invoke('link_send_line', { line }),
+  sendTracked: (line, id) => invoke('link_send_tracked', { line, id }),
   sendRealtime: (byte) => invoke('link_send_realtime', { byte }),
   snapshot: () => invoke('link_snapshot'),
   injectFault: (fault) => invoke('virtual_inject_fault', { fault }),
@@ -58,7 +59,8 @@ export const tauriBackend: Backend = {
     return { job, text };
   },
   loadJobText: (name, text) => invoke<LoadedJob>('job_load_text', { name, text }),
-  jobStart: (mode) => invoke('job_start', { mode }),
+  jobStart: (mode, options) => invoke('job_start', { mode, options: options ?? null }),
+  jobToolChangeDone: () => invoke('job_tool_change_done'),
   jobPause: () => invoke('job_pause'),
   jobResume: () => invoke('job_resume'),
   jobStop: () => invoke('job_stop'),

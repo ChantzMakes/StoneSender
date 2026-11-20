@@ -128,8 +128,34 @@ small details are approximate.
 
 The clock icon in the Job panel shows the history of jobs you've run.
 
-Tool changes (M6) aren't guided yet: export one file per tool from your CAM, or set the profile's tool change
-setting to *Ignore M6* if you change bits yourself.
+**Tool changes (M6):** the job stops before each tool change, after everything before it has finished.
+A yellow panel in the Job section walks you through it: the spindle stops and the machine moves to your
+tool-change position, you swap the bit, and — depending on your profile — the app re-measures it with
+the touch plate or the fixed tool setter so Z zero stays right. *Continue the job* raises Z, restarts the
+spindle (with its spin-up pause) and carries on. You can jog during the change. Set *Ignore M6* in the
+profile if you never change bits mid-job.
+
+**Start from a line:** *Start from a line…* in the Job panel restarts a job part-way, e.g. after you
+stopped it. It suggests the line where the last run stopped. *Show how* lists exactly what is sent first:
+raise to the safe height, spindle on and wait, move over the start point, feed down to it, then the job's
+own settings. Some files can't be restarted part-way (if the skipped part sets offsets or probes) — the
+app says why. Make sure the right bit is in the spindle.
+
+### Probing
+
+*Probe…* (Machine panel) opens the probing wizards. Each one shows a little animation of what will happen.
+**Before every probe you must touch the plate to the bit** (or press the tool setter): the app checks it
+sees the touch, so an unplugged clip can't drive the bit into the plate. Keep a hand near STOP the first
+time.
+
+- **Z plate** — plate on the stock, bit a few mm above it: sets Z zero on the stock.
+- **XYZ corner** — corner plate on the front-left corner, bit over the plate's top near its corner: sets
+  X, Y and Z zero at the corner. Enter your bit diameter.
+- **Centre** — inside a hole or around a round/square boss: sets X0 Y0 in the middle and shows the size.
+- **Tool setter** — measure the bit before you change it by hand, then the new one: Z zero moves by the
+  length difference.
+- **Surface map** — for uneven stock or PCBs. Set Z zero on the surface, probe a grid over the job, then
+  *Apply to the loaded job*: a copy named `…-leveled.nc` follows the surface. Check it in the 3D view.
 
 ## 6. Controller settings ($$)
 

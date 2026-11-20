@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { JobMode } from '@/lib/backend';
-import { isBlocked, preflight, type CheckLevel } from '@/lib/job/preflight';
+import { isBlocked, preflight, type CheckLevel, type PreflightCheck } from '@/lib/job/preflight';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { errorMessage } from '@/lib/utils';
 import { machineBounds } from '@/lib/profile/geometry';
@@ -15,6 +15,7 @@ import { useRemoval } from '@/store/removal';
 import { useSim } from '@/store/sim';
 import { useSimTool } from '../viewer/useSimSetup';
 import { useLink } from '@/store/link';
+import type { StartFrom } from './StartFromLineDialog';
 
 const ICON: Record<CheckLevel, React.ReactNode> = {
   block: <OctagonX className="size-4 text-destructive" />,
@@ -24,7 +25,23 @@ const ICON: Record<CheckLevel, React.ReactNode> = {
 };
 const ORDER: CheckLevel[] = ['block', 'warn', 'info', 'ok'];
 
-export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | null; profile: MachineProfile; onClose: () => void }) {
+/** Extra pre-flight lines when starting part-way through the job. */
+function startFromChecks(s: StartFrom | null): PreflightCheck[] {
+  if (!s) return [];
+  const r = s.recovery;
+  return [
+    ...r.blockers.map((b, i) => ({ id: `sfl-b${i}`, level: 'block' as const, title: b })),
+    ...r.warnings.map((w, i) => ({ id: `sfl-w${i}`, level: 'warn' as const, title: w })),
+    {
+      id: 'sfl',
+      level: 'info' as const,
+      title: `Starting at line ${s.line}: ${r.prelude.length} recovery lines are sent first`,
+      detail: `${r.prelude.join('\n')}\nThe travel and stock checks below cover the whole file.`,
+    },
+  ];
+}
+
+export function PreflightDialog({ mode, profile, onClose, startFrom = null }: { mode: JobMode | null; profile: MachineProfile; onClose: () => void; startFrom?: StartFrom | null }) {
   const loaded = useLink((s) => s.loadedJob);
   const controller = useLink((s) => s.controller);
   const status = useLink((s) => s.status);
@@ -60,9 +77,9 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
   const [error, setError] = useState<string | null>(null);
 
   const checks = useMemo(
-    () => (loaded && mode ? preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus, sim, removal }) : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
+    () => (loaded && mode ? [...preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus, sim, removal }), ...startFromChecks(startFrom)] : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
     // Status arrives several times a second; re-evaluate only when state or offsets change.
-    [loaded, mode, profile, controller, analysis, analysisStatus, sim, removal, status?.state?.name, status?.wco?.join(',')],
+    [loaded, mode, profile, controller, analysis, analysisStatus, sim, removal, startFrom, status?.state?.name, status?.wco?.join(',')],
   );
   const blocked = isBlocked(checks);
   const needsAck = mode === 'run';
@@ -80,7 +97,7 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
     >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{mode === 'check' ? 'Check job (dry run)' : 'Ready to run?'}</DialogTitle>
+          <DialogTitle>{mode === 'check' ? 'Check job (dry run)' : startFrom ? `Ready to run from line ${startFrom.line}?` : 'Ready to run?'}</DialogTitle>
           <DialogDescription>
             {loaded?.name} · {loaded?.scan.lines.toLocaleString()} lines · profile “{profile.identity.name}”
             {mode === 'check' && ' — the controller reads every line in check mode ($C) without moving.'}
@@ -118,7 +135,10 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
               setBusy(true);
               setError(null);
               try {
-                await startJob(mode);
+                await startJob(mode, {
+                  toolChange: profile.toolChange.strategy === 'ignore' ? 'skip' : 'pause',
+                  ...(startFrom && mode === 'run' ? { fromLine: startFrom.line, prelude: startFrom.recovery.prelude } : {}),
+                });
                 setAck(false);
                 onClose();
               } catch (e) {

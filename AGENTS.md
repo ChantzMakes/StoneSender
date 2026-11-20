@@ -11,7 +11,8 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 4 | 3D toolpath viewer, live tool tracking, scrubber/playback, camera views, rulers, measuring | **done** |
 | 5 | Parametric machine model (router/laser/combo/rotary, gantry/table kinematics), accel-aware playback, travel/below-stock/rapid-through-stock checks in the view and pre-flight | **done** |
 | 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | **done** |
-| 7 | Advanced (see the spec: tool changes, start-from-line, probing, gamepad…) | next |
+| 7a | Start-from-line, guided tool changes, probing wizards, height-map auto-leveling | **done** (awaiting review) |
+| 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | next |
 | 8 | Polish / distribution | — |
 
 ## Commands
@@ -34,10 +35,10 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
 
-All of the above pass as of the end of Phase 6 (Rust: 79 tests incl. 19 link/streaming integration tests against
-the emulator; Vitest: 112 incl. 9 planner-vs-emulator timing checks and 13 removal/export tests; Playwright: 25,
-run with 4 workers because headless Chromium renders WebGL in software — long flows use `test.slow()`;
-clippy clean with `-D warnings`).
+All of the above pass as of the end of Phase 7a (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
+tests against the emulator; Vitest: 130 incl. 9 planner-vs-emulator timing checks, removal/export, recovery,
+probing routines and leveling; Playwright: 29, run with 4 workers because headless Chromium renders WebGL in
+software — long flows use `test.slow()`; clippy clean with `-D warnings`).
 
 ## Layout
 
@@ -134,9 +135,10 @@ docs/USER_GUIDE.md
 12. **Jobs are refused** unless the machine is Idle, nothing is queued, no jog is active, and the word scan
     found no lines the firmware rejects. Interactive commands are refused while a job runs; while paused only
     `$$ $# $G $I $N` are allowed. Jogging is refused during jobs and unless Idle/Jog.
-13. **M6 tool changes** are blocked at pre-flight (unless the profile says "ignore M6") until guided tool
-    changes land in Phase 7 — running past an M6 on GRBL 1.1 would error, and silently skipping it would cut
-    with the wrong tool.
+13. **M6 tool changes** (Phase 7a): M6 is never sent (removed in `gcode_prep`). A run stops *before* the M6
+    line once every earlier line is acknowledged (phase `tool-change`), the UI guides the change, then
+    `tool_change_done` continues with the rest of that line. "Ignore M6" skips them (`ToolChangeMode::Skip`).
+    Pre-flight blocks only "tool setter" without a configured setter.
 14. **Continuous jog** streams ~0.1 s `$J=` chunks (≥ stopping distance / 2), at most 3 unacknowledged.
     On release, or if UI heartbeats stop for 350 ms, no new chunks are made; once every sent chunk is
     acknowledged (in the planner, not the RX buffer) a jog-cancel (0x85) is sent, so no stale chunk can run
@@ -157,6 +159,33 @@ docs/USER_GUIDE.md
     the machine maximum.
 19. Loading another file (open, drop, recent, edited text) is refused while a job is active; the editor is
     read-only during a job.
+20. **Probing (owner decision):** every probing move requires a **touch test** first — the user touches the
+    plate to the bit (or presses the tool setter) and the app must see the probe pin (`Pn:P`) on and then
+    off. The test is required again before each run. G38.2 is used (alarm if nothing is touched within
+    the profile's max distance); fast touch, back off, slow touch; the machine returns to the exact trigger
+    point before `G10 L20` is written, so overshoot never enters the result. After a touch the routine backs
+    off before probing another direction (otherwise GRBL raises ALARM:4).
+21. **Tool length after a change (owner decision): adjust work Z** with `G10 L20` (persists across resets),
+    not G43.1. Touch plate: Z0 = plate surface − thickness on the surface Z was zeroed on. Tool setter:
+    measure the old bit before the change and the new bit after; work Z is set so the setter contact has
+    the same work Z for both bits.
+22. **Tool-change sequence:** M5, M9, raise to `safety.safeZMachine`, go to `toolChange.position` (machine),
+    `G4 P0` (waits for motion); user confirms the new bit is fitted; optional re-measure; then raise to safe
+    Z, restore coolant and spindle **as the job had them after the M6 line** (interpreter state) with the
+    profile's spin-up dwell, `G4 P0`, continue. Jogging is allowed during the tool change; settings writes
+    are not.
+23. **Start from line:** recovery lines (`lib/job/recovery.ts`) are sent **one at a time** before the job; a
+    rejected one fails the start and nothing after it is sent. Order: G21 G90 plane feed-mode, WCS, safe Z
+    (machine), T, coolant, spindle + spin-up (routers), rapid XY(A), routers: rapid to start Z + clearance
+    then feed down at the job's last plunge feed (capped at Z max rate); lasers: no plunge, laser state
+    restored after positioning; finally the job's units / distance mode / feed / G0-G1. **Blocked** when the
+    skipped part uses G92, G10, G43.1, G28.1, G30.1 or probing, or the start line continues a modal arc.
+24. **Routines restore modes:** probing and tool-change routines switch to G21 for their own numbers and
+    restore the controller's G20/G21 and G90/G91 (read with `$G`) at the end — decision 17 still holds for
+    the user's modal state. After an alarm the restore is skipped (a reset restores defaults).
+25. **Auto-leveling** rewrites the loaded file as `<name>-leveled.nc` (the original stays on disk): Z of every
+    move + bilinear surface height; moves split to ≤ half the grid spacing; G17 arcs become lines. Refused for
+    G91 moves, arcs in G18/G19 and G92. Z0 must be set on the surface before probing the map.
 
 ## G-code engine conventions (Phase 3)
 
@@ -254,6 +283,23 @@ docs/USER_GUIDE.md
 - drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
 - With the machine model hidden, moving-table machines no longer slide the job in Y.
 
+## Phase 7a conventions
+
+- **Tracked commands:** `Link::send_tracked(line, id)` → `LinkEvent::CommandAck { id, error, message, dropped }`;
+  dropped on reset / alarm / disconnect (flush). TS: `lib/machine/commander.ts` (`sendAndWait`,
+  `probeAndWait` — reads the `[PRB:]` rx line that arrives before the `ok`; `readParserState`), wired from
+  the link store. Alarms and disconnects reject everything pending.
+- **Routines** (`lib/machine/routines.ts`) are plain async functions over `MachineIO`; `liveIO` adapts the
+  real link, unit tests use `DemoMachine`. Corner probing starts with the bit over the plate's top within
+  ~10 mm of its corner and moves off by "clearance + bit radius"; outside-centre probing needs an
+  approximate width and drop depth.
+- **Browser preview controller** = `lib/backend/demoMachine.ts` (instant moves, G0/G1/G38.x, G10 L2/L20,
+  G53, G54–59, G20/21, G90/91, `$G`, `$X`, probe pin, alarms) with solids placed from the profile: stock top
+  40 % down the Z travel from 25 % into X/Y, a corner plate on its front-left corner, the tool setter. It
+  models the bit as a point. "Simulate the touch" in the touch test exists only in the preview.
+- Job engine: recovery prelude lines are `Origin::JobControl`, sent send-response; `JobProgress` has
+  `toolChange` and `preludeLines`. `job_start(mode, options { fromLine, prelude, toolChange })`.
+
 ## Profile / GRBL conventions
 
 - Machine bounds follow GRBL 1.1 `limits_go_home`: `negative-space` (stock) → every axis spans
@@ -286,6 +332,22 @@ Not modelled (yet): hard-limit switches (only via fault injection), safety door,
 spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, serial baud timing.
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
+
+## Known gaps after Phase 7a
+
+- The guided tool change and start-from-line run only in the desktop app (the browser preview has no
+  streaming engine); their engine behaviour is covered by Rust integration tests against the emulator,
+  the UI flow for tool changes is not covered by e2e tests.
+- The browser preview's quick scan doesn't detect M6, so the pre-flight tool-change line only appears in
+  the desktop app.
+- Probing results in the preview come from a point-probe model; real bits touch with their edge (the
+  corner routine accounts for the radius). Outside-centre and tool-setter flows were only unit-tested.
+- Start from line skips nothing inside a line (it starts at a whole line) and can't start in the middle of
+  a modal arc; jobs using G91 get a warning, not a block.
+- Height map: one Z touch per point at the slow feed after a fast find; no interpolation outside the
+  probed area (edge values are used); the map is kept for the session only (no save/load yet).
+- Tool-setter reference from the Probe dialog is kept for the session only; it's invalid once work Z is
+  changed some other way.
 
 ## Known gaps after Phase 6
 

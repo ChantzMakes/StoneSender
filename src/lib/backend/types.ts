@@ -105,7 +105,7 @@ export interface ControllerInfo {
 }
 
 export type JobMode = 'run' | 'check';
-export type JobPhase = 'starting' | 'running' | 'paused' | 'paused-on-error' | 'finishing' | 'stopping' | 'completed' | 'stopped' | 'failed';
+export type JobPhase = 'starting' | 'running' | 'paused' | 'paused-on-error' | 'finishing' | 'stopping' | 'tool-change' | 'completed' | 'stopped' | 'failed';
 
 export interface JobError {
   sourceLine: number;
@@ -126,6 +126,19 @@ export interface JobProgress {
   errorCount: number;
   errors: JobError[];
   message: string | null;
+  /** Set while the job waits at an M6 for a guided tool change */
+  toolChange: { line: number; tool: number | null } | null;
+  /** Recovery lines sent before the first job line (start from line) */
+  preludeLines: number;
+}
+
+export interface JobStartOptions {
+  /** Start from this source line; earlier lines are skipped */
+  fromLine?: number;
+  /** Recovery lines sent one at a time before the job */
+  prelude?: string[];
+  /** 'pause' = guided tool change at M6; 'skip' = profile ignores M6 */
+  toolChange?: 'pause' | 'skip';
 }
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
@@ -182,7 +195,9 @@ export type LinkEvent =
   | { type: 'firmware'; info: FirmwareInfo }
   | { type: 'queue'; pending: number; inFlight: boolean; dropped: number }
   | { type: 'controller'; info: ControllerInfo }
-  | { type: 'job'; progress: JobProgress };
+  | { type: 'job'; progress: JobProgress }
+  /** A tracked command was acknowledged, or dropped (reset / alarm / disconnect) */
+  | { type: 'commandAck'; id: number; error: number | null; message: string | null; dropped: boolean };
 
 export interface LinkSnapshot {
   state: LinkState;
@@ -248,6 +263,8 @@ export interface Backend {
   connect(req: ConnectRequest): Promise<void>;
   disconnect(): Promise<void>;
   sendLine(line: string): Promise<void>;
+  /** Queue a line; its answer arrives as a `commandAck` event with this id. */
+  sendTracked(line: string, id: number): Promise<void>;
   sendRealtime(byte: number): Promise<void>;
   snapshot(): Promise<LinkSnapshot>;
   injectFault(fault: FaultRequest): Promise<void>;
@@ -259,7 +276,9 @@ export interface Backend {
   loadJobPath(path: string): Promise<{ job: LoadedJob; text: string }>;
   /** Load text that is already in the UI (edited in the editor, dropped in the browser). */
   loadJobText(name: string, text: string): Promise<LoadedJob>;
-  jobStart(mode: JobMode): Promise<void>;
+  jobStart(mode: JobMode, options?: JobStartOptions): Promise<void>;
+  /** The guided tool change is done; the job continues after the M6. */
+  jobToolChangeDone(): Promise<void>;
   jobPause(): Promise<void>;
   jobResume(): Promise<void>;
   jobStop(): Promise<void>;
@@ -269,4 +288,6 @@ export interface Backend {
   jogHeartbeat(): Promise<void>;
   jogStop(): Promise<void>;
   controllerRefresh(): Promise<void>;
+  /** Browser preview only: pretend the touch plate touches the bit (probe pin on). */
+  simulateProbeTouch?(on: boolean): void;
 }

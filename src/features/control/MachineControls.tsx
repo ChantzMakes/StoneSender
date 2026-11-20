@@ -9,6 +9,7 @@ import { errorMessage } from '@/lib/utils';
 import { sysMessage } from '@/store/console';
 import { isActivePhase, useLink } from '@/store/link';
 import { useUi } from '@/store/ui';
+import { ProbeDialog } from '../probe/ProbeDialog';
 
 export function MachineControls({ profile }: { profile: MachineProfile }) {
   const connected = useLink((s) => s.state === 'connected');
@@ -19,6 +20,7 @@ export function MachineControls({ profile }: { profile: MachineProfile }) {
   const sendRealtime = useLink((s) => s.sendRealtime);
   const setWcsOpen = useUi((s) => s.setWcsOpen);
   const [confirmZ, setConfirmZ] = useState(false);
+  const [probeOpen, setProbeOpen] = useState(false);
 
   const state = status?.state?.name;
   const idle = connected && state === 'idle' && !jobActive;
@@ -96,10 +98,18 @@ export function MachineControls({ profile }: { profile: MachineProfile }) {
             </span>
           </Tip>
         </div>
-        <Button size="sm" variant="ghost" disabled={!connected} onClick={() => setWcsOpen(true)} data-testid="open-wcs">
-          Work offsets (G54–G59)…
-        </Button>
+        <div className="grid grid-cols-2 gap-1.5">
+          {profile.machineType !== 'laser' && (
+            <Button size="sm" variant="outline" disabled={!idle} onClick={() => setProbeOpen(true)} data-testid="open-probe">
+              Probe…
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className={profile.machineType === 'laser' ? 'col-span-2' : ''} disabled={!connected} onClick={() => setWcsOpen(true)} data-testid="open-wcs">
+            Work offsets…
+          </Button>
+        </div>
       </div>
+      {profile.machineType !== 'laser' && <ProbeDialog open={probeOpen} onOpenChange={setProbeOpen} profile={profile} />}
       <ConfirmDialog
         open={confirmZ}
         onOpenChange={setConfirmZ}

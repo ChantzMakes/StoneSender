@@ -164,7 +164,10 @@ describe('pre-flight', () => {
     expect(isBlocked(preflight({ scan: scan(), profile: router, controller: null, status: { ...idle, state: { name: 'alarm' } }, mode: 'run', ...done }))).toBe(true);
     expect(isBlocked(preflight({ scan: scan({}, [{ line: 3, severity: 'error', code: 'unsupported', message: 'G81' }]), profile: router, controller: null, status: idle, mode: 'run', ...done }))).toBe(true);
     const m6 = scan({ toolChanges: [{ line: 5, tool: 2 }] });
-    expect(isBlocked(preflight({ scan: m6, profile: router, controller: null, status: idle, mode: 'run', ...done }))).toBe(true);
+    // Phase 7: guided tool changes — M6 no longer blocks, unless the tool setter is chosen but not set up.
+    expect(isBlocked(preflight({ scan: m6, profile: setPath(router, 'toolChange.strategy', 'pause'), controller: null, status: idle, mode: 'run', ...done }))).toBe(false);
+    const noSetter = setPath(setPath(router, 'toolChange.strategy', 'tool-setter'), 'probe.toolSetter.enabled', false);
+    expect(isBlocked(preflight({ scan: m6, profile: noSetter, controller: null, status: idle, mode: 'run', ...done }))).toBe(true);
     const ignore = setPath(router, 'toolChange.strategy', 'ignore');
     expect(isBlocked(preflight({ scan: m6, profile: ignore, controller: null, status: idle, mode: 'run', ...done }))).toBe(false);
   });

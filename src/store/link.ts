@@ -6,6 +6,7 @@ import {
   type FirmwareInfo,
   type JobMode,
   type JobProgress,
+  type JobStartOptions,
   type LinkEvent,
   type LinkState,
   type LoadedJob,
@@ -14,6 +15,7 @@ import {
   type VirtualFlavor,
 } from '@/lib/backend';
 import { alarmInfo, errorInfo } from '@/lib/grbl/codes';
+import { onLinkEvent as commanderEvent, setReportInches } from '@/lib/machine/commander';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { errorMessage } from '@/lib/utils';
 import { useApp } from './app';
@@ -55,7 +57,8 @@ interface LinkStore {
   /** Replace the loaded job with edited text */
   loadJobText(name: string, text: string): Promise<void>;
   unloadJob(): Promise<void>;
-  startJob(mode: JobMode): Promise<void>;
+  startJob(mode: JobMode, options?: JobStartOptions): Promise<void>;
+  toolChangeDone(): Promise<void>;
 }
 
 let unlisten: (() => void) | null = null;
@@ -172,8 +175,12 @@ export const useLink = create<LinkStore>((set, get) => ({
     set({ loadedJob: null, jobText: null, job: null });
   },
 
-  async startJob(mode) {
-    await backend.jobStart(mode);
+  async startJob(mode, options) {
+    await backend.jobStart(mode, options);
+  },
+
+  async toolChangeDone() {
+    await backend.jobToolChangeDone();
   },
 }));
 
@@ -225,6 +232,7 @@ export function isActivePhase(phase: JobProgress['phase'] | undefined): boolean 
 }
 
 function handleEvent(e: LinkEvent) {
+  commanderEvent(e);
   const set = useLink.setState;
   const push = useConsole.getState().push;
   switch (e.type) {
@@ -275,6 +283,7 @@ function handleEvent(e: LinkEvent) {
       break;
     case 'controller':
       set({ controller: e.info });
+      setReportInches(e.info.settings['13'] === '1');
       break;
     case 'job': {
       const prev = useLink.getState().job;
@@ -286,6 +295,7 @@ function handleEvent(e: LinkEvent) {
           paused: 'Job paused.',
           'paused-on-error': `Job paused: line ${p.errors.at(-1)?.sourceLine ?? '?'} was rejected by the controller.`,
           stopping: 'Stopping job…',
+          'tool-change': `Tool change at line ${p.toolChange?.line ?? '?'}${p.toolChange?.tool != null ? ` (T${p.toolChange.tool})` : ''}: the job is waiting for you.`,
           completed: p.message ?? 'Job finished.',
           stopped: p.message ?? 'Job stopped.',
           failed: p.message ?? 'Job failed.',

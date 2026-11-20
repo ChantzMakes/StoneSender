@@ -21,7 +21,7 @@
 //! (0x85) is emitted, which stops motion and flushes the planned chunks. This
 //! guarantees no stale jog line can execute after the cancel.
 
-use grbl_core::gcode_prep::PreparedLine;
+use grbl_core::gcode_prep::{PreparedLine, ToolChange};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -33,7 +33,8 @@ const MAX_REPORTED_ERRORS: usize = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
-    Command,
+    /// Interactive line; tracked ones carry an id the UI waits on
+    Command(Option<u64>),
     /// Lines the app adds around a job (e.g. `$C` for check mode)
     JobControl,
     Job(usize),
@@ -59,9 +60,23 @@ pub enum JobPhase {
     /// Everything acknowledged; waiting for the machine to finish moving
     Finishing,
     Stopping,
+    /// Stopped before an M6 line: everything before it has been acknowledged.
+    /// The UI guides the tool change (interactive commands are allowed), then
+    /// calls `tool_change_done`.
+    ToolChange,
     Completed,
     Stopped,
     Failed,
+}
+
+/// What a run does at M6 lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ToolChangeMode {
+    /// Stop before the line and wait for a guided tool change
+    #[default]
+    Pause,
+    /// Send the line without M6 and carry on (profile says "ignore M6")
+    Skip,
 }
 
 impl JobPhase {
@@ -94,6 +109,10 @@ pub struct JobProgress {
     pub error_count: usize,
     pub errors: Vec<JobError>,
     pub message: Option<String>,
+    /// Set while the job waits for a tool change
+    pub tool_change: Option<ToolChange>,
+    /// Number of recovery lines sent before the job (start from line)
+    pub prelude_lines: usize,
 }
 
 #[derive(Debug)]
@@ -117,6 +136,11 @@ pub struct Job {
     pub message: Option<String>,
     pub stop_requested_at: Option<Instant>,
     pub reset_sent: bool,
+    pub tool_change_mode: ToolChangeMode,
+    /// Index of the M6 line whose tool change is done (send it now)
+    tool_change_cleared: Option<usize>,
+    pending_tool_change: Option<ToolChange>,
+    prelude_total: usize,
 }
 
 impl Job {
@@ -145,7 +169,26 @@ impl Job {
             message: None,
             stop_requested_at: None,
             reset_sent: false,
+            tool_change_mode: ToolChangeMode::Pause,
+            tool_change_cleared: None,
+            pending_tool_change: None,
+            prelude_total: 0,
         }
+    }
+
+    /// Recovery lines sent (one at a time) before the first job line — used
+    /// to start from a line with the right modal state. Run mode only.
+    pub fn with_prelude(mut self, lines: Vec<String>) -> Self {
+        if self.mode == JobMode::Run {
+            self.prelude_total = lines.len();
+            self.prelude.extend(lines);
+        }
+        self
+    }
+
+    pub fn with_tool_change_mode(mut self, mode: ToolChangeMode) -> Self {
+        self.tool_change_mode = mode;
+        self
     }
 
     pub fn progress(&self, now: Instant) -> JobProgress {
@@ -163,6 +206,8 @@ impl Job {
             error_count: self.error_count,
             errors: self.errors.clone(),
             message: self.message.clone(),
+            tool_change: self.pending_tool_change.clone(),
+            prelude_lines: self.prelude_total,
         }
     }
 
@@ -194,19 +239,21 @@ pub enum Outgoing {
 pub enum AckEvent {
     /// Nothing was in flight (stray ok, e.g. from a line sent before connect)
     Unexpected,
-    Command { error: Option<u16> },
+    Command { error: Option<u16>, id: Option<u64> },
     Job,
     /// A job line failed in run mode: the job paused; send a feed hold.
     JobErrorPaused(JobError),
     /// A job line failed in check mode: recorded, streaming continues.
     JobErrorRecorded(JobError),
-    JobControlFailed,
+    JobControlFailed(String),
     Jog { error: Option<u16> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlushResult {
     pub dropped_commands: usize,
+    /// Tracked commands that will never be acknowledged
+    pub dropped_ids: Vec<u64>,
     pub job_ended: Option<JobPhase>,
 }
 
@@ -215,7 +262,7 @@ pub struct Engine {
     pub rx_capacity: usize,
     in_flight: VecDeque<(usize, Origin, bool)>,
     in_flight_bytes: usize,
-    commands: VecDeque<String>,
+    commands: VecDeque<(String, Option<u64>)>,
     pub job: Option<Job>,
     jog: Option<JogRun>,
 }
@@ -258,7 +305,16 @@ impl Engine {
     }
 
     pub fn queue_command(&mut self, line: String) {
-        self.commands.push_back(line);
+        self.commands.push_back((line, None));
+    }
+
+    /// Queue a line whose acknowledgement the caller waits for (`AckEvent::Command { id }`).
+    pub fn queue_tracked(&mut self, line: String, id: u64) {
+        self.commands.push_back((line, Some(id)));
+    }
+
+    pub fn job_phase(&self) -> Option<JobPhase> {
+        self.job.as_ref().map(|j| j.phase)
     }
 
     pub fn start_job(&mut self, job: Job) {
@@ -302,7 +358,9 @@ impl Engine {
             Some(JobPhase::Starting) => {
                 let front = self.job.as_ref()?.prelude.front().map(|l| (l.len(), is_system(l)));
                 if let Some((len, sys)) = front {
-                    if self.can_send(len, sys) {
+                    // Recovery lines go one at a time so a rejected line stops the rest.
+                    let one_at_a_time = self.job.as_ref()?.prelude_total > 0;
+                    if self.can_send(len, sys) && (!one_at_a_time || self.in_flight.is_empty()) {
                         let l = self.job.as_mut()?.prelude.pop_front()?;
                         return Some(self.take(l, Origin::JobControl));
                     }
@@ -320,6 +378,23 @@ impl Engine {
                     (j.next, j.lines.len(), j.acked)
                 };
                 if next < total {
+                    let job = self.job.as_mut()?;
+                    let line = &job.lines[next];
+                    if line.tool_change.is_some() && job.mode == JobMode::Run && job.tool_change_mode == ToolChangeMode::Pause && job.tool_change_cleared != Some(next) {
+                        if acked < next {
+                            return None; // let everything before the M6 be acknowledged first
+                        }
+                        job.pending_tool_change = line.tool_change.clone();
+                        job.phase = JobPhase::ToolChange;
+                        job.paused_at = Some(now);
+                        return self.poll(now);
+                    }
+                    if line.text.is_empty() {
+                        // A line that only held M6: nothing to send.
+                        job.next += 1;
+                        job.acked += 1;
+                        return self.poll(now);
+                    }
                     let (len, sys) = {
                         let t = &self.job.as_ref()?.lines[next].text;
                         (t.len(), is_system(t))
@@ -365,18 +440,19 @@ impl Engine {
                 }
                 return None;
             }
-            // Paused: fall through so read-only commands can run.
-            Some(JobPhase::Paused | JobPhase::PausedOnError) => {}
+            // Paused / tool change: fall through so interactive commands can run
+            // (the link decides which ones are allowed).
+            Some(JobPhase::Paused | JobPhase::PausedOnError | JobPhase::ToolChange) => {}
             Some(p) if p.is_active() => return None,
             _ => {}
         }
 
         // --- interactive commands (strict order)
-        if let Some(c) = self.commands.front() {
+        if let Some((c, _)) = self.commands.front() {
             let (len, sys) = (c.len(), is_system(c));
             if self.can_send(len, sys) {
-                let c = self.commands.pop_front()?;
-                return Some(self.take(c, Origin::Command));
+                let (c, id) = self.commands.pop_front()?;
+                return Some(self.take(c, Origin::Command(id)));
             }
             return None;
         }
@@ -406,7 +482,7 @@ impl Engine {
         self.in_flight_bytes = self.in_flight_bytes.saturating_sub(len);
         let code = error.as_ref().and_then(|e| e.0);
         match origin {
-            Origin::Command => AckEvent::Command { error: code },
+            Origin::Command(id) => AckEvent::Command { error: code, id },
             Origin::Jog => {
                 if error.is_some() {
                     if let Some(j) = &mut self.jog {
@@ -417,9 +493,17 @@ impl Engine {
             }
             Origin::JobControl => {
                 if let Some(job) = &mut self.job {
-                    if error.is_some() && job.phase.is_active() {
-                        job.end(JobPhase::Failed, Some("The controller refused to enter check mode (it must be idle).".into()), now);
-                        return AckEvent::JobControlFailed;
+                    if let Some((code, text)) = &error {
+                        if job.phase.is_active() {
+                            let msg = if job.mode == JobMode::Check {
+                                "The controller refused to enter check mode (it must be idle).".to_string()
+                            } else {
+                                let c = code.map(|c| format!("error:{c}")).unwrap_or_else(|| text.clone());
+                                format!("The controller rejected a recovery line ({c}); the job did not start and nothing after it was sent.")
+                            };
+                            job.end(JobPhase::Failed, Some(msg.clone()), now);
+                            return AckEvent::JobControlFailed(msg);
+                        }
                     }
                 }
                 AckEvent::Job
@@ -455,7 +539,9 @@ impl Engine {
     /// flight will be acknowledged and nothing queued may be sent.
     pub fn flush(&mut self, reason: &str, now: Instant) -> FlushResult {
         // Interactive commands that were queued or sent but never acknowledged.
-        let dropped = self.commands.len() + self.in_flight.iter().filter(|(_, o, _)| *o == Origin::Command).count();
+        let dropped = self.commands.len() + self.in_flight.iter().filter(|(_, o, _)| matches!(o, Origin::Command(_))).count();
+        let mut dropped_ids: Vec<u64> = self.in_flight.iter().filter_map(|(_, o, _)| if let Origin::Command(Some(id)) = o { Some(*id) } else { None }).collect();
+        dropped_ids.extend(self.commands.iter().filter_map(|(_, id)| *id));
         self.in_flight.clear();
         self.in_flight_bytes = 0;
         self.commands.clear();
@@ -471,7 +557,7 @@ impl Engine {
                 job_ended = Some(phase);
             }
         }
-        FlushResult { dropped_commands: dropped, job_ended }
+        FlushResult { dropped_commands: dropped, dropped_ids, job_ended }
     }
 
     // ----- job control ------------------------------------------------------
@@ -499,6 +585,22 @@ impl Engine {
                 } else {
                     JobPhase::Running
                 };
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The guided tool change finished: continue with the M6 line (without M6).
+    pub fn tool_change_done(&mut self, now: Instant) -> bool {
+        match &mut self.job {
+            Some(j) if j.phase == JobPhase::ToolChange => {
+                if let Some(p) = j.paused_at.take() {
+                    j.paused_total += now.saturating_duration_since(p);
+                }
+                j.tool_change_cleared = Some(j.next);
+                j.pending_tool_change = None;
+                j.phase = JobPhase::Running;
                 true
             }
             _ => false,
@@ -566,7 +668,7 @@ mod tests {
     use super::*;
 
     fn lines(n: usize, text: &str) -> Vec<PreparedLine> {
-        (0..n).map(|i| PreparedLine { source_line: i as u32 + 1, text: text.to_string() }).collect()
+        (0..n).map(|i| PreparedLine { source_line: i as u32 + 1, text: text.to_string(), tool_change: None }).collect()
     }
 
     fn drain(e: &mut Engine, now: Instant) -> Vec<Outgoing> {
@@ -609,7 +711,7 @@ mod tests {
         let first = drain(&mut e, t);
         assert_eq!(first.len(), 1, "$ command waits for the buffer to empty");
         e.on_ack(None, t);
-        assert_eq!(drain(&mut e, t), vec![Outgoing::Line { text: "$110=500".into(), origin: Origin::Command }]);
+        assert_eq!(drain(&mut e, t), vec![Outgoing::Line { text: "$110=500".into(), origin: Origin::Command(None) }]);
         e.on_ack(None, t);
         assert_eq!(drain(&mut e, t).len(), 1);
     }
@@ -687,7 +789,7 @@ mod tests {
         e.pause_job(t);
         e.on_ack(None, t);
         e.on_ack(None, t);
-        assert_eq!(drain(&mut e, t), vec![Outgoing::Line { text: "$G".into(), origin: Origin::Command }]);
+        assert_eq!(drain(&mut e, t), vec![Outgoing::Line { text: "$G".into(), origin: Origin::Command(None) }]);
     }
 
     #[test]

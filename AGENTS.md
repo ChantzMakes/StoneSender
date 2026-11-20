@@ -9,8 +9,9 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 2 | Character-counting streamer, real-time commands UI, jogging, homing, WCS, overrides, firmware detection, error/alarm tables, `$$` editor + profile diff/sync | **done** |
 | 3 | Full G-code interpreter, planner/time estimator, job stats, Monaco editor, drag-and-drop / recent files / job history, travel check in pre-flight | **done** |
 | 4 | 3D toolpath viewer, live tool tracking, scrubber/playback, camera views, rulers, measuring | **done** |
-| 5 | Parametric machine model, kinematics, limit/collision checks, pre-flight | next |
-| 6–8 | See the spec (material removal, advanced, polish/distribution) | — |
+| 5 | Parametric machine model (router/laser/combo/rotary, gantry/table kinematics), accel-aware playback, travel/below-stock/rapid-through-stock checks in the view and pre-flight | **done** |
+| 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | next |
+| 7–8 | See the spec (advanced, polish/distribution) | — |
 
 ## Commands
 
@@ -32,8 +33,8 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
 
-All of the above pass as of the end of Phase 4 (Rust: 78 tests incl. 19 link/streaming integration tests against
-the emulator; Vitest: 88 incl. 9 planner-vs-emulator timing checks; Playwright: 19, run with 4 workers because
+All of the above pass as of the end of Phase 5 (Rust: 78 tests incl. 19 link/streaming integration tests against
+the emulator; Vitest: 98 incl. 9 planner-vs-emulator timing checks; Playwright: 21, run with 4 workers because
 headless Chromium renders WebGL in software; clippy clean with `-D warnings`).
 
 ## Layout
@@ -58,6 +59,8 @@ src/
   lib/grbl/            error/alarm tables, $$ metadata, profile↔$$ diff/sync, override bytes,
                        command builders (zero, go-to, park, WCS — modal-units aware)
   lib/job/preflight.ts pre-flight checks (spec §8)
+  lib/sim/             setup.ts (stock/tool setup, stock box by origin mode, assumed work offset when
+                       offline), checks.ts (travel / below-stock / rapid-through-stock collision checks)
   lib/gcode/           G-code engine: interpreter.ts (modal interpreter, GRBL error codes, arcs,
                        offsets, checkpoints for start-from-line), toolpath.ts (columnar typed-array
                        storage), planner.ts (GRBL planner model → time), stats.ts, analyze.ts,
@@ -68,7 +71,8 @@ src/
   features/            wizard, profiles, connection, dro, console, workarea, safety, layout,
                        jog, control (machine buttons, overrides), wcs, job (panel, stats, history,
                        drop), settings ($$ editor), editor (Monaco, lazy-loaded),
-                       viewer (three.js / react-three-fiber, lazy-loaded: Scene.tsx, Viewer3D.tsx)
+                       viewer (three.js / react-three-fiber, lazy-loaded: Scene.tsx, Viewer3D.tsx,
+                       MachineModel.tsx parametric machine, StockDialog.tsx, useSimSetup.ts)
   store/sim.ts         playback time/speed, colour mode, view toggles, camera requests, measuring
   store/analysis.ts    re-runs the worker analysis when job text / profile / motion settings change
   components/ui/       shadcn-style primitives on Radix
@@ -184,6 +188,29 @@ docs/USER_GUIDE.md
 - Editor ↔ viewer: the scrubbed line is highlighted in the editor; moving the cursor in the editor seeks the
   playback to that line (`features/viewer/seek.ts`, kept free of three.js so the editor chunk stays small).
 
+## Machine simulation conventions (Phase 5)
+
+- The machine model is generated entirely from the profile: travel (machineBounds), frame size (auto or
+  `geometry.frame.size`), gantry style, machine type, laser focus height, rotary mode/diameter, tool setup.
+  Proportions (rail width, spindle size…) scale with the envelope.
+- **Placement:** scene frame = work coordinates; a machine point m is drawn at m − wco. When connected wco is
+  the live WCO; offline it is `assumedWco` (stock lying on the bed near the front-left of the travel) and the
+  view says so.
+- **Kinematics:** moving gantry → gantry group follows Y, X carriage follows X, Z group follows Z. Moving
+  table → gantry fixed at mid-travel and `TableGroup` (bed, stock, toolpath, markers, travel box, measuring)
+  slides in Y so the tool stays under the spindle. Rotary (A ∥ X, through work Y0 Z0 — Z0 on the stock
+  centreline): chuck/jaws/stock rotate with A, or with Y/yMmPerRevolution in Y-substitution mode.
+- **Tool pose** (`currentToolPose`): playback position when previewing, else the live WPos, else parked at
+  the clearance height. With the machine shown, the red live cone appears only while previewing.
+- **Playback follows the planner's speed profile:** the planner records entry/exit/cruise speed and
+  acceleration per toolpath segment (`toolpath.motion`); `sampleAt` maps time → distance along the
+  trapezoid (`pathFraction`), scaled to the segment's planned duration.
+- **Checks** (`lib/sim/checks.ts`) sample arcs every 10°. Rapids through stock use a slab test against the
+  stock box widened by the tool radius and lowered 0.05 mm from the top; **straight-up retracts are exempt**
+  (they leave through their own slot — without material removal we can't tell cut from uncut). Lasers skip
+  stock checks; rotary skips them until the cylindrical sim. All three are **warnings** in pre-flight (the
+  travel check keeps its Phase 3 block-when-homing-enabled rule and now names the first offending line).
+
 ## Profile / GRBL conventions
 
 - Machine bounds follow GRBL 1.1 `limits_go_home`: `negative-space` (stock) → every axis spans
@@ -216,6 +243,18 @@ Not modelled (yet): hard-limit switches (only via fault injection), safety door,
 spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, serial baud timing.
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
+
+## Known gaps after Phase 5
+
+- Stock/tool setup is per session (resets to the profile defaults on profile change) and not yet saved with
+  the job; the tool library is Phase 6.
+- Rotary jobs are still drawn flat (the toolpath isn't wrapped onto the cylinder) and skip stock checks;
+  the rotary model assumes A ∥ X.
+- Rapid-through-stock can't distinguish already-cut material (Phase 6 material removal); retracts are exempt,
+  which can hide a rapid that plunges straight down and back up.
+- No collision checks for the machine body (gantry/spindle vs stock or clamps), and no tool-holder clearance
+  (Phase 6).
+- The machine is a schematic made of boxes and cylinders, not a CAD model of each brand.
 
 ## Known gaps after Phase 4
 

@@ -96,6 +96,13 @@ G-code tab, and clicking a line there jumps the playback to it. The ruler button
 points. While a job runs, finished parts of the path turn grey and the red marker shows where the machine
 really is.
 
+The 3D view also shows a model of **your machine**, built from your profile — it moves along with the
+playback (or with the real machine while connected). Set your **stock size and where your zero is on it**
+with the box icon (*Stock & tool*); the view then warns, in a box at the top right, if the job leaves the
+machine's travel, cuts below the bottom of the stock, or makes rapid moves through it. The same warnings
+appear in the pre-flight list. The green dot marks the home position; the travel box turns orange when soft
+limits are on.
+
 The clock icon in the Job panel shows the history of jobs you've run.
 
 Tool changes (M6) aren't guided yet: export one file per tool from your CAM, or set the profile's tool change

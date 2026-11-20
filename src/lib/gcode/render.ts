@@ -9,7 +9,8 @@
  * Coordinates are the toolpath's (work zero = origin, see analyze.ts). The A
  * axis is ignored here; rotary wrapping is drawn by the machine simulator.
  */
-import { ARC_FIELDS, SEG, type Toolpath } from './toolpath';
+import { pathFraction } from './planner';
+import { ARC_FIELDS, MOTION_FIELDS, SEG, type Toolpath } from './toolpath';
 
 /** Display kinds (shader `aKind`) */
 export const DKIND = { rapid: 0, feed: 1, arc: 2, plunge: 3, probe: 4 } as const;
@@ -261,11 +262,23 @@ export function sampleAt(tp: Toolpath, segEnd: Float64Array, t: number): Sample 
     }
   const i = lo;
   const dur = tp.duration[i]!;
-  const frac = dur > 0 ? Math.min(1, Math.max(0, (t - (segEnd[i]! - dur)) / dur)) : 1;
+  const timeFrac = dur > 0 ? Math.min(1, Math.max(0, (t - (segEnd[i]! - dur)) / dur)) : 1;
   const s = i === 0 ? [tp.origin[0]!, tp.origin[1]!, tp.origin[2]!, tp.origin[3]!] : [tp.end[(i - 1) * 4]!, tp.end[(i - 1) * 4 + 1]!, tp.end[(i - 1) * 4 + 2]!, tp.end[(i - 1) * 4 + 3]!];
   const e = [tp.end[i * 4]!, tp.end[i * 4 + 1]!, tp.end[i * 4 + 2]!, tp.end[i * 4 + 3]!];
   const k = tp.kind[i]!;
   const pos = [0, 0, 0, 0] as Sample['pos'];
+  // Distance along the move follows the planned speed profile (accelerate, cruise, decelerate).
+  let len: number;
+  if (k === SEG.arcCw || k === SEG.arcCcw) {
+    const a = tp.arcRef[i]! * ARC_FIELDS;
+    const [a0, a1, lin] = PLANES[tp.arcs[a + 4]!]!;
+    const r = Math.hypot(s[a0]! - tp.arcs[a + a0]!, s[a1]! - tp.arcs[a + a1]!);
+    len = Math.hypot(Math.abs(tp.arcs[a + 3]!) * r, e[lin]! - s[lin]!);
+  } else {
+    len = Math.hypot(e[0]! - s[0]!, e[1]! - s[1]!, e[2]! - s[2]!, e[3]! - s[3]!);
+  }
+  const mo = i * MOTION_FIELDS;
+  const frac = tp.motion ? pathFraction(timeFrac, len, tp.motion[mo]!, tp.motion[mo + 1]!, tp.motion[mo + 2]!, tp.motion[mo + 3]!) : timeFrac;
   if (k === SEG.arcCw || k === SEG.arcCcw) {
     const a = tp.arcRef[i]! * ARC_FIELDS;
     const c = [tp.arcs[a]!, tp.arcs[a + 1]!, tp.arcs[a + 2]!];

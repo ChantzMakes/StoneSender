@@ -1,11 +1,13 @@
 /** 3D toolpath viewer: canvas, toolbar, legend and playback scrubber. */
 import { Canvas } from '@react-three/fiber';
-import { Box, Crosshair, Eye, EyeOff, Grid3x3, LocateFixed, Pause, Play, Ruler, SkipBack, SkipForward } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { Box, Cog, Maximize, Crosshair, Eye, EyeOff, Grid3x3, LocateFixed, Package, Pause, Play, Ruler, Settings2, SkipBack, SkipForward } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, Tip } from '@/components/ui/primitives';
 import { sampleAt } from '@/lib/gcode/render';
 import { machineBounds } from '@/lib/profile/geometry';
+import { runChecks } from '@/lib/sim/checks';
+import { stockBox } from '@/lib/sim/setup';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
 import { useAnalysis } from '@/store/analysis';
@@ -13,7 +15,10 @@ import { useApp } from '@/store/app';
 import { isActivePhase, useLink } from '@/store/link';
 import { type ColorMode, SPEEDS, useSim } from '@/store/sim';
 import { formatDuration } from '../job/format';
+import { machineLayout } from './MachineModel';
 import { Scene, type Palette, type ViewBounds } from './Scene';
+import { StockDialog } from './StockDialog';
+import { useSimSetup, useSimWco } from './useSimSetup';
 
 const PALETTES: Record<'dark' | 'light', Palette> = {
   dark: { background: '#141920', grid: '#2a3340', section: '#3c4a5c', label: '#9aa7b6' },
@@ -157,9 +162,26 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
   const analysis = useAnalysis((s) => s.result);
   const status = useAnalysis((s) => s.status);
   const theme = useApp((s) => s.settings.theme);
-  const wco = useLink((s) => s.status?.wco);
   const connected = useLink((s) => s.state === 'connected');
   const sim = useSim();
+  const [stockOpen, setStockOpen] = useState(false);
+  const { stock, tool } = useSimSetup(profile);
+  const { wco: simWco, assumed } = useSimWco(profile, stock);
+  const wcoKey = simWco.map((v) => v.toFixed(3)).join(',');
+  // Recompute only when the placement actually changes, not on every status report.
+  const layout = useMemo(() => machineLayout(profile, simWco, tool), [profile, wcoKey, tool]);
+  const checks = useMemo(() => {
+    if (!analysis) return null;
+    const b = machineBounds(profile);
+    return runChecks({
+      tp: analysis.toolpath,
+      wco: simWco,
+      bounds: { min: [b.min.x, b.min.y, b.min.z], max: [b.max.x, b.max.y, b.max.z] },
+      stock: profile.machineType === 'rotary' ? null : stockBox(stock),
+      toolRadius: tool.diameter / 2,
+      laser: profile.machineType === 'laser',
+    });
+  }, [analysis, profile, wcoKey, stock, tool]);
   const palette = PALETTES[theme];
   const units = profile.units;
   const env = profile.geometry.envelope;
@@ -187,13 +209,9 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
   const bounds: ViewBounds = useMemo(() => {
     const b = analysis?.stats.workBounds;
     if (b && !b.empty) return { min: [b.min[0], b.min[1], b.min[2]], max: [b.max[0], b.max[1], b.max[2]] };
-    if (connected && wco && wco.length >= 3) {
-      const m = machineBounds(profile);
-      return { min: [m.min.x - wco[0]!, m.min.y - wco[1]!, m.min.z - wco[2]!], max: [m.max.x - wco[0]!, m.max.y - wco[1]!, m.max.z - wco[2]!] };
-    }
-    return { min: [0, 0, 0], max: [100, 100, 20] };
-    // wco only matters when there is no job; avoid refitting on every status report
-  }, [analysis, connected, profile, analysis ? null : wco?.join(',')]);
+    // No job: frame the whole machine.
+    return { min: layout.frameMin, max: [layout.frameMax[0], layout.frameMax[1], layout.beamZ + 40] };
+  }, [analysis, layout]);
 
   const hasGL = useMemo(webglAvailable, []);
   const btn = (label: string, onClick: () => void, icon: React.ReactNode, active = false, testId?: string) => (
@@ -209,7 +227,7 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
       <div className="relative min-h-0 flex-1">
         {hasGL ? (
           <Canvas frameloop="demand" camera={{ fov: 40, position: [150, -200, 180], near: 0.1, far: 100000 }} gl={{ antialias: true }} dpr={[1, 2]} data-testid="viewer-canvas">
-            <Scene analysis={analysis} profile={profile} palette={palette} bounds={bounds} />
+            <Scene analysis={analysis} profile={profile} palette={palette} bounds={bounds} layout={layout} stock={stock} tool={tool} wco={simWco} problems={checks?.problems ?? []} />
           </Canvas>
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">3D view needs WebGL, which is not available here. Update your graphics drivers.</div>
@@ -224,10 +242,14 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
           ))}
           <div className="mx-0.5 h-5 w-px bg-border" />
           {btn('Fit to job', () => sim.requestView('fit'), <Box />, false, 'view-fit')}
+          {btn('Show the whole machine', () => sim.requestView('machine'), <Maximize />, false, 'view-machine')}
           {btn('Follow the tool', () => sim.set({ follow: !sim.follow }), <LocateFixed />, sim.follow, 'toggle-follow')}
           {btn(sim.showRapids ? 'Hide rapids' : 'Show rapids', () => sim.set({ showRapids: !sim.showRapids }), sim.showRapids ? <Eye /> : <EyeOff />, !sim.showRapids, 'toggle-rapids')}
           {btn('Grid and rulers', () => sim.set({ showGrid: !sim.showGrid }), <Grid3x3 />, sim.showGrid)}
-          {btn('Machine travel box', () => sim.set({ showEnvelope: !sim.showEnvelope }), <Crosshair />, sim.showEnvelope)}
+          {btn('Machine travel box and home', () => sim.set({ showEnvelope: !sim.showEnvelope }), <Crosshair />, sim.showEnvelope)}
+          {btn(sim.showMachine ? 'Hide machine' : 'Show machine', () => sim.set({ showMachine: !sim.showMachine }), <Cog />, sim.showMachine, 'toggle-machine')}
+          {btn(sim.showStock ? 'Hide stock' : 'Show stock', () => sim.set({ showStock: !sim.showStock }), <Package />, sim.showStock)}
+          {btn('Stock & tool settings', () => setStockOpen(true), <Settings2 />, false, 'stock-settings')}
           {btn(sim.measuring ? 'Stop measuring' : 'Measure: click two points', () => sim.set({ measuring: !sim.measuring, measure: [] }), <Ruler />, sim.measuring, 'toggle-measure')}
           <div className="w-52">
             <Select aria-label="Colour mode" value={sim.colorMode} options={COLOR_MODES} onValueChange={(v) => sim.set({ colorMode: v as ColorMode })} className="h-7 text-xs" />
@@ -245,13 +267,27 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
               {analysis.render.fullSegments.toLocaleString()} segments{analysis.render.decimated ? ` (simplified to ${(analysis.render.vertexCount / 2).toLocaleString()} for display)` : ''}
             </span>
           )}
+          {assumed && <span>Machine placed assuming the stock lies on the bed (connect to use your real work zero)</span>}
           {sim.measuring && <span className="text-yellow-500">Click two points (snaps to toolpath ends)</span>}
           <Legend profile={profile} />
         </div>
+        {checks && (checks.travel.length > 0 || checks.belowStock || checks.rapidsThroughStockCount > 0) && (
+          <div className="pointer-events-none absolute top-12 right-2 flex max-w-xs flex-col gap-0.5 rounded-md border border-destructive/40 bg-card/90 px-2 py-1 text-[11px] backdrop-blur" data-testid="sim-problems">
+            {checks.travel.length > 0 && <span className="text-red-500">● Leaves the machine travel ({checks.travel.map((t) => `${t.axis}${t.side === 'max' ? '+' : '−'}`).join(', ')}) from line {checks.travel[0]!.line}</span>}
+            {checks.belowStock && (
+              <span className="text-fuchsia-400">
+                ● Cuts {formatLength(checks.belowStock.maxDepth, units, 2)} {unitLabel('length', units)} below the stock from line {checks.belowStock.line}
+              </span>
+            )}
+            {checks.rapidsThroughStockCount > 0 && <span className="text-orange-400">● {checks.rapidsThroughStockCount} rapid move(s) through the stock, first at line {checks.rapidsThroughStock[0]!.line}</span>}
+            {assumed && <span className="text-muted-foreground">Travel checked against an assumed work zero.</span>}
+          </div>
+        )}
         {!analysis && status !== 'running' && <div className="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-muted-foreground">Open a G-code file to see its toolpath.</div>}
         {status === 'running' && <div className="pointer-events-none absolute inset-x-0 top-1/2 text-center text-sm text-muted-foreground">Preparing the toolpath…</div>}
       </div>
       <Scrubber />
+      <StockDialog open={stockOpen} onOpenChange={setStockOpen} profile={profile} />
     </div>
   );
 }

@@ -52,7 +52,11 @@ export interface Toolpath {
   arcCount: number;
   /** seconds, filled by the planner */
   duration: Float32Array;
+  /** Per segment, filled by the planner: entry speed, exit speed, cruise speed (mm/s), acceleration (mm/s²) */
+  motion: Float32Array;
 }
+
+export const MOTION_FIELDS = 4;
 
 const ARC_STRIDE = 5;
 export const ARC_FIELDS = ARC_STRIDE;
@@ -156,6 +160,7 @@ export class ToolpathBuilder {
       arcs: this.arcs.slice(0, this.arcCount * ARC_STRIDE),
       arcCount: this.arcCount,
       duration: new Float32Array(n),
+      motion: new Float32Array(n * MOTION_FIELDS),
     };
   }
 }
@@ -173,5 +178,5 @@ export function segStart(tp: Toolpath, i: number, out: Float64Array | number[] =
 
 /** Buffers to pass as the transfer list of postMessage. */
 export function transferables(tp: Toolpath): ArrayBuffer[] {
-  return [tp.origin, tp.kind, tp.flags, tp.line, tp.end, tp.feed, tp.spindle, tp.tool, tp.arcRef, tp.arcs, tp.duration].map((a) => a.buffer as ArrayBuffer);
+  return [tp.origin, tp.kind, tp.flags, tp.line, tp.end, tp.feed, tp.spindle, tp.tool, tp.arcRef, tp.arcs, tp.duration, tp.motion].map((a) => a.buffer as ArrayBuffer);
 }

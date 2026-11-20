@@ -3,7 +3,10 @@
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 4 of 8.** Adds a 3D toolpath viewer (colour by move type, feed, depth or power; live
+> **Status: Phase 5 of 8.** Adds a parametric 3D model of your machine (router, laser, combo, rotary;
+> moving gantry or moving table) that moves with the job or the live machine, playback that follows
+> acceleration, and checks for moves outside the travel, cuts below the stock and rapids through it.
+> Phase 4 added a 3D toolpath viewer (colour by move type, feed, depth or power; live
 > progress; playback scrubber 0.1–100×; top/front/side/3D views, fit, follow; rulers; measuring tool).
 > Phase 3 added a full G-code interpreter, a GRBL planner model for time estimates, job
 > statistics, a G-code editor with hover docs and error markers, drag-and-drop / recent files / history, and
@@ -104,6 +107,8 @@ flowchart TB
   `grbl-link/src/serial.rs` and `virtual-grbl/src/port.rs`.
 - **Protocol** — `grbl-core/src/protocol.rs` (every GRBL line type), `status.rs` (status reports incl.
   GRBL 0.9 format), `firmware.rs`.
+- **Machine simulation** — `src/features/viewer/MachineModel.tsx` (parametric model + kinematics),
+  `src/lib/sim/` (stock/tool setup, collision and limit checks).
 - **3D viewer** — `src/features/viewer/`: react-three-fiber scene; one shader-coloured `LineSegments` draw
   call built in the worker (`src/lib/gcode/render.ts`), playback state in `src/store/sim.ts`.
 - **G-code engine** — `src/lib/gcode/`: modal interpreter → typed-array toolpath → planner (time) → stats,

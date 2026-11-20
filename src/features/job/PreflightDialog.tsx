@@ -7,7 +7,11 @@ import type { JobMode } from '@/lib/backend';
 import { isBlocked, preflight, type CheckLevel } from '@/lib/job/preflight';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { errorMessage } from '@/lib/utils';
+import { machineBounds } from '@/lib/profile/geometry';
+import { runChecks } from '@/lib/sim/checks';
+import { defaultStock, defaultTool, stockBox } from '@/lib/sim/setup';
 import { useAnalysis } from '@/store/analysis';
+import { useSim } from '@/store/sim';
 import { useLink } from '@/store/link';
 
 const ICON: Record<CheckLevel, React.ReactNode> = {
@@ -25,14 +29,35 @@ export function PreflightDialog({ mode, profile, onClose }: { mode: JobMode | nu
   const startJob = useLink((s) => s.startJob);
   const analysis = useAnalysis((s) => s.result);
   const analysisStatus = useAnalysis((s) => s.status);
+  const simStock = useSim((s) => s.stock);
+  const simTool = useSim((s) => s.tool);
+  const wcoKey = status?.wco?.join(',');
+  // Collision / limit checks against the stock, placed with the live work offset.
+  const sim = useMemo(() => {
+    const wco = status?.wco;
+    if (!analysis || !wco || wco.length < 3) return null;
+    const stock = simStock ?? defaultStock(profile);
+    const tool = simTool ?? defaultTool(profile);
+    const b = machineBounds(profile);
+    const checks = runChecks({
+      tp: analysis.toolpath,
+      wco: [wco[0]!, wco[1]!, wco[2]!],
+      bounds: { min: [b.min.x, b.min.y, b.min.z], max: [b.max.x, b.max.y, b.max.z] },
+      stock: profile.machineType === 'rotary' ? null : stockBox(stock),
+      toolRadius: tool.diameter / 2,
+      laser: profile.machineType === 'laser',
+    });
+    return { checks, stock };
+    // Re-run only when the offset, stock or job changes — not on every status report.
+  }, [analysis, profile, simStock, simTool, wcoKey]);
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const checks = useMemo(
-    () => (loaded && mode ? preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus }) : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
+    () => (loaded && mode ? preflight({ scan: loaded.scan, profile, controller, status, mode, analysis, analysisStatus, sim }) : []).sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level)),
     // Status arrives several times a second; re-evaluate only when state or offsets change.
-    [loaded, mode, profile, controller, analysis, analysisStatus, status?.state?.name, status?.wco?.join(',')],
+    [loaded, mode, profile, controller, analysis, analysisStatus, sim, status?.state?.name, status?.wco?.join(',')],
   );
   const blocked = isBlocked(checks);
   const needsAck = mode === 'run';

@@ -13,10 +13,12 @@ import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { AnalysisResult } from '@/lib/gcode/client';
 import { buildSnapIndex, niceStep, sampleAt, type SnapIndex } from '@/lib/gcode/render';
-import { machineBounds } from '@/lib/profile/geometry';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
+import type { Problem } from '@/lib/sim/checks';
+import type { StockSetup, ToolSetup } from '@/lib/sim/setup';
 import { isActivePhase, useLink } from '@/store/link';
+import { Bed, currentToolPose, MachineFrame, type MachineLayout, ProblemMarkers, StockBody, TableGroup, TravelAndHome } from './MachineModel';
 import { useSim, type Vec3 } from '@/store/sim';
 
 // Z is up for CNC.
@@ -185,27 +187,6 @@ function Axes({ size, palette }: { size: number; palette: Palette }) {
   );
 }
 
-function Envelope({ profile }: { profile: MachineProfile }) {
-  const wco = useLink((s) => s.status?.wco);
-  const connected = useLink((s) => s.state === 'connected');
-  const box = useMemo(() => {
-    if (!connected || !wco || wco.length < 3) return null;
-    const b = machineBounds(profile);
-    const min = [b.min.x - wco[0]!, b.min.y - wco[1]!, b.min.z - wco[2]!];
-    const max = [b.max.x - wco[0]!, b.max.y - wco[1]!, b.max.z - wco[2]!];
-    const size = [max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!];
-    const center = [(min[0]! + max[0]!) / 2, (min[1]! + max[1]!) / 2, (min[2]! + max[2]!) / 2];
-    return { size, center, geom: new THREE.EdgesGeometry(new THREE.BoxGeometry(size[0], size[1], size[2])) };
-  }, [profile, wco, connected]);
-  useEffect(() => () => box?.geom.dispose(), [box]);
-  if (!box) return null;
-  return (
-    <lineSegments geometry={box.geom} position={box.center as Vec3}>
-      <lineBasicMaterial color="#8b5cf6" transparent opacity={0.55} />
-    </lineSegments>
-  );
-}
-
 /** Live machine position (solid) and playback position (ghost). */
 function ToolMarkers({ analysis, profile }: { analysis: AnalysisResult | null; profile: MachineProfile }) {
   const live = useRef<THREE.Group>(null);
@@ -214,14 +195,18 @@ function ToolMarkers({ analysis, profile }: { analysis: AnalysisResult | null; p
   useFrame(() => {
     const link = useLink.getState();
     const wpos = link.state === 'connected' ? link.status?.wpos : undefined;
+    // With the machine model shown, the model itself is the marker for whichever
+    // pose it follows; the red cone then only marks the live machine during playback.
+    const machineShown = useSim.getState().showMachine;
+    const poseSource = currentToolPose(analysis, profile).source;
     if (live.current) {
-      live.current.visible = !!wpos && wpos.length >= 3;
+      live.current.visible = !!wpos && wpos.length >= 3 && (!machineShown || poseSource === 'sim');
       if (wpos) live.current.position.set(wpos[0]!, wpos[1]!, wpos[2]!);
     }
     if (ghost.current) {
       const sim = useSim.getState();
       const jobActive = isActivePhase(link.job?.phase);
-      const show = !!analysis && !jobActive && (sim.time > 0 || sim.playing);
+      const show = !!analysis && !jobActive && (sim.time > 0 || sim.playing) && !sim.showMachine;
       ghost.current.visible = show;
       if (show && analysis) {
         const s = sampleAt(analysis.toolpath, analysis.render.segEnd, sim.time);
@@ -382,21 +367,32 @@ export interface ViewBounds {
   max: Vec3;
 }
 
-function CameraRig({ bounds }: { bounds: ViewBounds }) {
+function CameraRig({ bounds, machine }: { bounds: ViewBounds; machine: ViewBounds }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate } = useThree();
   const req = useSim((s) => s.viewRequest);
   const lastFollow = useRef<THREE.Vector3 | null>(null);
   const boundsKey = `${bounds.min.join(',')}|${bounds.max.join(',')}`;
 
-  const apply = (kind: 'top' | 'front' | 'side' | 'iso' | 'fit') => {
+  const apply = (kind: 'top' | 'front' | 'side' | 'iso' | 'fit' | 'machine') => {
+    const c = controls.current;
+    if (!c) return;
+    if (kind === 'machine') {
+      fitTo(machine, new THREE.Vector3(0.75, -1, 0.85).normalize());
+      return;
+    }
+    fitTo(bounds, null, kind);
+  };
+
+  const fitTo = (bounds: ViewBounds, fixedDir: THREE.Vector3 | null, kind: 'top' | 'front' | 'side' | 'iso' | 'fit' = 'iso') => {
     const c = controls.current;
     if (!c) return;
     const center = new THREE.Vector3((bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2, (bounds.min[2] + bounds.max[2]) / 2);
     const size = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2], 20);
     const dist = size * 1.5;
-    const dir =
-      kind === 'top'
+    const dir = fixedDir
+      ? fixedDir.clone()
+      : kind === 'top'
         ? new THREE.Vector3(0, -0.0001, 1)
         : kind === 'front'
           ? new THREE.Vector3(0, -1, 0.0001)
@@ -486,18 +482,34 @@ function Ticker({ analysis }: { analysis: AnalysisResult | null }) {
 
 // ---------------------------------------------------------------------------
 
-export function Scene({ analysis, profile, palette, bounds }: { analysis: AnalysisResult | null; profile: MachineProfile; palette: Palette; bounds: ViewBounds }) {
+export interface SceneProps {
+  analysis: AnalysisResult | null;
+  profile: MachineProfile;
+  palette: Palette;
+  bounds: ViewBounds;
+  layout: MachineLayout;
+  stock: StockSetup;
+  tool: ToolSetup;
+  wco: Vec3;
+  problems: Problem[];
+}
+
+export function Scene({ analysis, profile, palette, bounds, layout, stock, tool, wco, problems }: SceneProps) {
   const showGrid = useSim((s) => s.showGrid);
   const showEnvelope = useSim((s) => s.showEnvelope);
+  const showMachine = useSim((s) => s.showMachine);
+  const showStock = useSim((s) => s.showStock);
   const size = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], 20);
   return (
     <>
       <color attach="background" args={[palette.background]} />
-      <ambientLight intensity={1} />
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[1, -1.5, 2]} intensity={1.6} />
+      <directionalLight position={[-1, 1, 0.5]} intensity={0.4} />
       {showGrid && (
         <Grid
           rotation={[Math.PI / 2, 0, 0]}
-          position={[0, 0, Math.min(bounds.min[2], 0) - 0.01]}
+          position={[0, 0, (showMachine ? layout.frameMin[2] : Math.min(bounds.min[2], layout.bedTop)) - 0.5]}
           cellSize={size > 600 ? 50 : 10}
           sectionSize={size > 600 ? 500 : 100}
           cellColor={palette.grid}
@@ -508,12 +520,18 @@ export function Scene({ analysis, profile, palette, bounds }: { analysis: Analys
         />
       )}
       <Axes size={Math.max(size * 0.12, 10)} palette={palette} />
-      {showEnvelope && <Envelope profile={profile} />}
-      {analysis && <ToolpathLines analysis={analysis} profile={profile} />}
-      {analysis && showGrid && <Rulers analysis={analysis} profile={profile} palette={palette} />}
-      <ToolMarkers analysis={analysis} profile={profile} />
-      <MeasureTool analysis={analysis} profile={profile} />
-      <CameraRig bounds={bounds} />
+      {showMachine && <MachineFrame layout={layout} profile={profile} analysis={analysis} tool={tool} />}
+      <TableGroup layout={layout} analysis={analysis} profile={profile}>
+        {showMachine && <Bed layout={layout} />}
+        {showStock && <StockBody stock={stock} profile={profile} />}
+        {showEnvelope && <TravelAndHome profile={profile} wco={wco} />}
+        {analysis && <ToolpathLines analysis={analysis} profile={profile} />}
+        {analysis && showGrid && <Rulers analysis={analysis} profile={profile} palette={palette} />}
+        <ProblemMarkers problems={problems} />
+        <ToolMarkers analysis={analysis} profile={profile} />
+        <MeasureTool analysis={analysis} profile={profile} />
+      </TableGroup>
+      <CameraRig bounds={bounds} machine={{ min: layout.frameMin, max: [layout.frameMax[0], layout.frameMax[1], layout.beamZ + 40] }} />
       <Ticker analysis={analysis} />
     </>
   );

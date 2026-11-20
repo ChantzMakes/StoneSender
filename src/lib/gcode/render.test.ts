@@ -65,14 +65,27 @@ describe('playback sampling', () => {
     expect(sampleAt(tp, g.segEnd, 0).pos.slice(0, 3)).toEqual([0, 0, 0]);
     const mid = sampleAt(tp, g.segEnd, tp.duration[0]! / 2);
     expect(mid.line).toBe(1);
-    expect(mid.pos[0]).toBeCloseTo(50, 3);
+    expect(mid.pos[0]).toBeGreaterThan(40);
+    expect(mid.pos[0]).toBeLessThan(60);
     const arcMid = sampleAt(tp, g.segEnd, tp.duration[0]! + tp.duration[1]! / 2);
     expect(arcMid.line).toBe(2);
-    expect(arcMid.pos[0]).toBeCloseTo(110, 3);
-    expect(arcMid.pos[1]).toBeCloseTo(10, 3); // CW half circle from (100,0) around (110,0) passes over the top
+    expect(arcMid.pos[0]).toBeCloseTo(110, 1);
+    expect(arcMid.pos[1]).toBeCloseTo(10, 1); // CW half circle from (100,0) around (110,0) passes over the top
     const endPos = sampleAt(tp, g.segEnd, p.totalSeconds + 10).pos;
     expect(endPos[0]).toBeCloseTo(120, 6);
     expect(endPos[1]).toBeCloseTo(0, 4);
+  });
+
+  it('follows the acceleration profile within a move', () => {
+    // 100 mm at 100 mm/s, 500 mm/s²: 0.2 s accel (10 mm), 0.8 s cruise, 0.2 s decel.
+    const { tp } = prep('G0 X100');
+    const g = buildRenderGeometry(tp);
+    const at = (t: number) => sampleAt(tp, g.segEnd, t).pos[0];
+    expect(at(0.1)).toBeCloseTo(0.5 * 500 * 0.01, 2); // ½at² = 2.5 mm, not 100/12
+    expect(at(0.2)).toBeCloseTo(10, 2);
+    expect(at(0.6)).toBeCloseTo(50, 2);
+    expect(at(1.1)).toBeCloseTo(100 - 2.5, 2);
+    expect(at(1.2)).toBeCloseTo(100, 4);
   });
 
   it('maps lines to start times', () => {

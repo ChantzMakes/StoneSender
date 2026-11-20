@@ -14,6 +14,20 @@ type AnalysisResult = Omit<AnalyzeResult, 'checkpoints'>;
 import { machineBounds } from '@/lib/profile/geometry';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength } from '@/lib/profile/units';
+import type { CheckResult } from '@/lib/sim/checks';
+import type { StockSetup } from '@/lib/sim/setup';
+
+/** Collision/limit check results for the current stock (Phase 5). */
+export interface SimContext {
+  checks: CheckResult;
+  stock: StockSetup;
+}
+
+const ORIGIN_LABEL: Record<StockSetup['origin'], string> = {
+  'front-left-top': 'front-left corner, top',
+  'center-top': 'centre, top',
+  'front-left-bottom': 'front-left corner, bottom',
+};
 
 export type CheckLevel = 'block' | 'warn' | 'ok' | 'info';
 
@@ -33,9 +47,10 @@ export interface PreflightInput {
   /** Interpreter/planner analysis of the job (null while it runs) */
   analysis?: AnalysisResult | null;
   analysisStatus?: 'idle' | 'running' | 'done' | 'error';
+  sim?: SimContext | null;
 }
 
-export function preflight({ scan, profile, controller, status, mode, analysis, analysisStatus }: PreflightInput): PreflightCheck[] {
+export function preflight({ scan, profile, controller, status, mode, analysis, analysisStatus, sim }: PreflightInput): PreflightCheck[] {
   const out: PreflightCheck[] = [];
   const f = scan.features;
   const add = (c: PreflightCheck) => out.push(c);
@@ -133,9 +148,8 @@ export function preflight({ scan, profile, controller, status, mode, analysis, a
   } else if (analysisStatus === 'error' || !analysis) {
     add({ id: 'analysis', level: 'warn', title: 'The job could not be analysed', detail: 'Bounds could not be checked. Check the job fits your machine.' });
   } else {
-    for (const c of analysisChecks(analysis, profile, status, mode)) add(c);
+    for (const c of analysisChecks(analysis, profile, status, mode, sim ?? undefined)) add(c);
   }
-  add({ id: 'sim', level: 'info', title: 'Not yet checked: plunges below the stock and rapids through it', detail: 'These come with the stock simulator. Check your CAM settings.' });
   return out;
 }
 
@@ -144,7 +158,7 @@ export function isBlocked(checks: PreflightCheck[]): boolean {
 }
 
 /** Checks that need the interpreter / planner result. */
-export function analysisChecks(a: AnalysisResult, profile: MachineProfile, status: MachineStatus | null, mode: 'run' | 'check'): PreflightCheck[] {
+export function analysisChecks(a: AnalysisResult, profile: MachineProfile, status: MachineStatus | null, mode: 'run' | 'check', sim?: SimContext): PreflightCheck[] {
   const out: PreflightCheck[] = [];
   const units = profile.units;
   const u = units === 'inch' ? 'in' : 'mm';
@@ -176,8 +190,12 @@ export function analysisChecks(a: AnalysisResult, profile: MachineProfile, statu
       const lo = st.workBounds.min[i]! + wco[i]!;
       const hi = st.workBounds.max[i]! + wco[i]!;
       const k = keys[i]!;
-      if (lo < env.min[k] - 0.01) over.push(`${axes[i]} goes ${formatLength(env.min[k] - lo, units, 1)} ${u} past the ${i === 2 ? 'bottom' : 'minimum'}`);
-      if (hi > env.max[k] + 0.01) over.push(`${axes[i]} goes ${formatLength(hi - env.max[k], units, 1)} ${u} past the ${i === 2 ? 'top' : 'maximum'}`);
+      const at = (side: 'min' | 'max') => {
+        const t = sim?.checks.travel.find((x) => x.axis === axes[i] && x.side === side);
+        return t ? `, first at line ${t.line}` : '';
+      };
+      if (lo < env.min[k] - 0.01) over.push(`${axes[i]} goes ${formatLength(env.min[k] - lo, units, 1)} ${u} past the ${i === 2 ? 'bottom' : 'minimum'}${at('min')}`);
+      if (hi > env.max[k] + 0.01) over.push(`${axes[i]} goes ${formatLength(hi - env.max[k], units, 1)} ${u} past the ${i === 2 ? 'top' : 'maximum'}${at('max')}`);
     }
     if (over.length) {
       out.push({
@@ -196,6 +214,33 @@ export function analysisChecks(a: AnalysisResult, profile: MachineProfile, statu
     if (a.usesMachineCoords || a.changesOffsets) {
       out.push({ id: 'bounds-approx', level: 'info', title: 'Travel check is approximate', detail: 'The job uses G53/G28/G30 or changes work offsets (G10/G92/G54…), which depend on what is stored in the controller.' });
     }
+  }
+  if (sim && profile.machineType !== 'laser' && profile.machineType !== 'rotary') {
+    const c = sim.checks;
+    if (c.rapidsThroughStockCount > 0) {
+      out.push({
+        id: 'rapid-stock',
+        level: 'warn',
+        title: `${c.rapidsThroughStockCount} rapid move(s) pass through the stock`,
+        detail: `Lines ${c.rapidsThroughStock.map((r) => r.line).join(', ')}${c.rapidsThroughStockCount > c.rapidsThroughStock.length ? ', …' : ''}.
+Rapids at full speed through material break bits. Check the safe/clearance height in your CAM — or the stock size and Z zero below if those are wrong.`,
+      });
+    }
+    if (c.belowStock) {
+      out.push({
+        id: 'below-stock',
+        level: 'warn',
+        title: `Cuts ${formatLength(c.belowStock.maxDepth, units, 2)} ${u} below the bottom of the stock, first at line ${c.belowStock.line}`,
+        detail: 'Through-cuts often go a fraction of a millimetre into the spoilboard on purpose. Much deeper usually means the stock thickness or the Z zero is wrong.',
+      });
+    }
+    const sz = sim.stock.size;
+    out.push({
+      id: 'stock',
+      level: 'info',
+      title: `Checked against stock ${formatLength(sz.x, units, 1)} × ${formatLength(sz.y, units, 1)} × ${formatLength(sz.z, units, 1)} ${u}, work zero at the ${ORIGIN_LABEL[sim.stock.origin]}`,
+      detail: 'Change it under “Stock & tool” in the 3D view if that is not your stock.',
+    });
   }
   const size = (i: number) => formatLength(st.cutBounds.max[i]! - st.cutBounds.min[i]!, units, 1);
   if (!st.cutBounds.empty) {

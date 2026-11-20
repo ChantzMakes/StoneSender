@@ -17,7 +17,7 @@
  * Fills `toolpath.duration` and returns cumulative times per source line.
  */
 import type { MachineProfile } from '@/lib/profile/schema';
-import { ARC_FIELDS, FLAG, SEG, type Toolpath } from './toolpath';
+import { ARC_FIELDS, FLAG, MOTION_FIELDS, SEG, type Toolpath } from './toolpath';
 
 export interface PlannerConfig {
   /** mm/min (A: deg/min) */
@@ -84,9 +84,12 @@ class Planner {
   private time = 0;
   blocks = 0;
 
+  private lastSeg = -1;
+
   constructor(
     private cfg: PlannerConfig,
     private duration: Float32Array,
+    private motion: Float32Array,
   ) {}
 
   get elapsed() {
@@ -150,6 +153,18 @@ class Planner {
     const vn = Math.max(Math.sqrt(head.nominalSqr), v0, v1);
     const t = blockTime(head.len, v0, v1, vn, head.accel);
     this.duration[head.seg] = (this.duration[head.seg] ?? 0) + t;
+    // Per-segment speed profile for playback (arcs span several blocks).
+    const m = head.seg * MOTION_FIELDS;
+    if (head.seg !== this.lastSeg) {
+      this.lastSeg = head.seg;
+      this.motion[m] = v0;
+      this.motion[m + 2] = vn;
+      this.motion[m + 3] = head.accel;
+    } else {
+      this.motion[m + 2] = Math.max(this.motion[m + 2]!, vn);
+      this.motion[m + 3] = Math.min(this.motion[m + 3]!, head.accel);
+    }
+    this.motion[m + 1] = v1;
     this.time += t;
     this.vEntrySqr = exitSqr;
   }
@@ -170,7 +185,8 @@ class Planner {
 /** Plan a toolpath: fills `tp.duration`, returns totals and per-line times. */
 export function plan(tp: Toolpath, cfg: PlannerConfig, sourceLines: number): PlanResult {
   tp.duration.fill(0);
-  const planner = new Planner(cfg, tp.duration);
+  tp.motion.fill(0);
+  const planner = new Planner(cfg, tp.duration, tp.motion);
   const prev = [tp.origin[0]!, tp.origin[1]!, tp.origin[2]!, tp.origin[3]!];
   const end = [0, 0, 0, 0];
   const PLANES: [number, number, number][] = [
@@ -237,4 +253,39 @@ export function plan(tp: Toolpath, cfg: PlannerConfig, sourceLines: number): Pla
   }
   while (li < sourceLines) lineEndTime[++li] = acc;
   return { totalSeconds: planner.elapsed, lineEndTime, blocks: planner.blocks };
+}
+
+/**
+ * Fraction of a move's length covered after `timeFrac` of its duration,
+ * following the trapezoidal speed profile (v0 → vn → v1 at accel a).
+ * Falls back to linear when no profile is known.
+ */
+export function pathFraction(timeFrac: number, len: number, v0: number, v1: number, vn: number, a: number): number {
+  const tf = Math.min(1, Math.max(0, timeFrac));
+  if (!(len > 0) || !(a > 0) || !(vn > 0)) return tf;
+  const T = blockTime(len, v0, v1, vn, a);
+  if (!(T > 0)) return tf;
+  const t = tf * T;
+  const da = Math.max(0, (vn * vn - v0 * v0) / (2 * a));
+  const dd = Math.max(0, (vn * vn - v1 * v1) / (2 * a));
+  let s: number;
+  if (da + dd <= len) {
+    const ta = (vn - v0) / a;
+    const tc = (len - da - dd) / vn;
+    if (t < ta) s = v0 * t + 0.5 * a * t * t;
+    else if (t < ta + tc) s = da + vn * (t - ta);
+    else {
+      const u = t - ta - tc;
+      s = len - dd + vn * u - 0.5 * a * u * u;
+    }
+  } else {
+    const vp = Math.sqrt(Math.max((2 * a * len + v0 * v0 + v1 * v1) / 2, Math.max(v0, v1) ** 2));
+    const ta = Math.max(0, (vp - v0) / a);
+    if (t < ta) s = v0 * t + 0.5 * a * t * t;
+    else {
+      const u = t - ta;
+      s = (vp * vp - v0 * v0) / (2 * a) + vp * u - 0.5 * a * u * u;
+    }
+  }
+  return Math.min(1, Math.max(0, s / len));
 }

@@ -27,7 +27,7 @@ test('first run opens the setup wizard and creates a profile', async ({ page }) 
   await runWizard(page, 'desktop-3018', 'Desk mill');
   await expect(page.getByTestId('profile-switcher')).toContainText('Desk mill');
   // The work area view is sized from the 3018 preset (300 × 180 mm)
-  await expect(page.getByText('Work area — 300 × 180 mm')).toBeVisible();
+  await expect(page.getByTestId('viewer-info')).toContainText('Machine travel 300 × 180 × 45 mm');
 });
 
 test('the wizard blocks invalid values', async ({ page }) => {

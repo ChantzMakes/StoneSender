@@ -8,8 +8,9 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 1 | Scaffold, module interfaces, Machine Profiles (schema/storage/presets/wizard/import-export), virtual GRBL, serial layer, console, DRO, connect/disconnect | **done** |
 | 2 | Character-counting streamer, real-time commands UI, jogging, homing, WCS, overrides, firmware detection, error/alarm tables, `$$` editor + profile diff/sync | **done** |
 | 3 | Full G-code interpreter, planner/time estimator, job stats, Monaco editor, drag-and-drop / recent files / job history, travel check in pre-flight | **done** |
-| 4 | 3D toolpath viewer, live tool tracking, scrubber/playback | next |
-| 5–8 | See the spec (machine sim, material removal, advanced, polish/distribution) | — |
+| 4 | 3D toolpath viewer, live tool tracking, scrubber/playback, camera views, rulers, measuring | **done** |
+| 5 | Parametric machine model, kinematics, limit/collision checks, pre-flight | next |
+| 6–8 | See the spec (material removal, advanced, polish/distribution) | — |
 
 ## Commands
 
@@ -31,8 +32,9 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
 
-All of the above pass as of the end of Phase 3 (Rust: 78 tests incl. 19 link/streaming integration tests against
-the emulator; Vitest: 81 incl. 9 planner-vs-emulator timing checks; Playwright: 15; clippy clean with `-D warnings`).
+All of the above pass as of the end of Phase 4 (Rust: 78 tests incl. 19 link/streaming integration tests against
+the emulator; Vitest: 88 incl. 9 planner-vs-emulator timing checks; Playwright: 19, run with 4 workers because
+headless Chromium renders WebGL in software; clippy clean with `-D warnings`).
 
 ## Layout
 
@@ -59,12 +61,15 @@ src/
   lib/gcode/           G-code engine: interpreter.ts (modal interpreter, GRBL error codes, arcs,
                        offsets, checkpoints for start-from-line), toolpath.ts (columnar typed-array
                        storage), planner.ts (GRBL planner model → time), stats.ts, analyze.ts,
+                       render.ts (3D line buffers, playback sampling, snapping, ruler steps),
                        worker.ts + client.ts (Web Worker), docs.ts (G/M hover docs),
                        __fixtures__/emulator-times.json (from scripts/gen-timing-fixtures.mjs)
   store/               Zustand: app settings, profiles, link (+controller, job), console, ui
   features/            wizard, profiles, connection, dro, console, workarea, safety, layout,
                        jog, control (machine buttons, overrides), wcs, job (panel, stats, history,
-                       drop), settings ($ editor), editor (Monaco, lazy-loaded)
+                       drop), settings ($$ editor), editor (Monaco, lazy-loaded),
+                       viewer (three.js / react-three-fiber, lazy-loaded: Scene.tsx, Viewer3D.tsx)
+  store/sim.ts         playback time/speed, colour mode, view toggles, camera requests, measuring
   store/analysis.ts    re-runs the worker analysis when job text / profile / motion settings change
   components/ui/       shadcn-style primitives on Radix
 e2e/             Playwright specs
@@ -159,6 +164,26 @@ docs/USER_GUIDE.md
 - The Rust `gcode_prep` scan (firmware-aware: M6/M7/line length) and the TS interpreter (semantics: missing
   feed, arc geometry…) both feed the editor markers and pre-flight.
 
+## 3D viewer conventions (Phase 4)
+
+- Scene is **Z-up** (`THREE.Object3D.DEFAULT_UP`), units mm, origin = work zero (same as the analysis).
+- The whole toolpath is **one `LineSegments` draw call** with a custom shader. Per-vertex attributes: display
+  kind, feed, S, planned time. Colour mode, rapids on/off and "completed vs remaining" are **uniforms**, so
+  scrubbing/live progress never rebuilds geometry. Buffers are built in the worker (`render.ts`) and
+  transferred.
+- Arcs are tessellated for display at 0.02 mm chord error (max 128 pieces). Above 2M line segments, tiny
+  consecutive segments are merged for display (LOD) — the info overlay says so.
+- `frameloop="demand"`: frames render on camera moves, store changes, or while playing/live. Per-frame values
+  (time, tool positions) are read from stores in `useFrame`, not via React state.
+- Live job: the "done" threshold is the planned time at the last acknowledged line; the red marker is the live
+  `WPos`. Preview: the scrubber time, with a blue ghost marker sampled from the toolpath (`sampleAt`).
+- The envelope box is drawn only when connected (it needs the live WCO to place the machine travel around
+  the work zero). Laser profiles default to colouring by power; travel moves with S0 are drawn as rapids.
+- The viewer and the editor unmount when their tab is hidden; state that must survive lives in stores, and
+  "reset on new job/profile" uses module-level "last seen" keys (a remount once wiped the playback position).
+- Editor ↔ viewer: the scrubbed line is highlighted in the editor; moving the cursor in the editor seeks the
+  playback to that line (`features/viewer/seek.ts`, kept free of three.js so the editor chunk stays small).
+
 ## Profile / GRBL conventions
 
 - Machine bounds follow GRBL 1.1 `limits_go_home`: `negative-space` (stock) → every axis spans
@@ -191,6 +216,16 @@ Not modelled (yet): hard-limit switches (only via fault injection), safety door,
 spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, serial baud timing.
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
+
+## Known gaps after Phase 4
+
+- Viewer: no machine model yet (Phase 5); rotary jobs are drawn flat (A ignored) until the rotary simulator;
+  WebGL lines are 1 px (no thick lines); rulers are labels along the job edges, not a full ruler overlay; the
+  measuring tool picks on the work Z=0 plane and snaps to segment endpoints within 3 mm.
+- Playback interpolates linearly in time within each segment (the planner's acceleration profile isn't
+  replayed inside a segment); overall timing matches the estimate.
+- A 1M-line job: ~3.2 s analysis + 0.3 s render buffers, 2M vertices / ~64 MB GPU memory. Tested visually
+  with small jobs; large-job frame rate depends on the GPU (Phase 8 perf pass).
 
 ## Known gaps after Phase 3
 

@@ -88,6 +88,14 @@ if you know where the machine is.
 5. **Stop** (or the red STOP) slows the machine to a halt, then resets the controller so the position is
    kept.
 
+The **3D view** tab shows the toolpath: orange = rapid moves, blue = cutting, green = arcs, pink =
+plunges. Drag to rotate, right-drag to pan, scroll to zoom; the buttons top-right switch to Top / Front /
+Side / 3D views, fit the job, follow the tool, hide rapids, or colour by feed, depth or power. Press ▶ under
+the view to play the job (up to 100× speed) or drag the slider; the matching line is highlighted in the
+G-code tab, and clicking a line there jumps the playback to it. The ruler button measures between two
+points. While a job runs, finished parts of the path turn grey and the red marker shows where the machine
+really is.
+
 The clock icon in the Job panel shows the history of jobs you've run.
 
 Tool changes (M6) aren't guided yet: export one file per tool from your CAM, or set the profile's tool change

@@ -4,9 +4,11 @@
  */
 import type { AnalyzeInput, AnalyzeResult } from './analyze';
 import type { InterpState } from './interpreter';
+import type { RenderGeometry } from './render';
 import type { WorkerRequest, WorkerResponse } from './worker';
 
-export type AnalysisResult = Omit<AnalyzeResult, 'checkpoints'>;
+/** Worker result: the analysis plus the 3D view's render buffers. */
+export type AnalysisResult = Omit<AnalyzeResult, 'checkpoints'> & { render: RenderGeometry };
 
 let worker: Worker | null = null;
 let nextId = 1;

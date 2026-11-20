@@ -7,7 +7,10 @@
  */
 import type { ControllerInfo, JobScan, MachineStatus } from '@/lib/backend';
 import { machineTypeMismatch } from '@/lib/grbl/profileSettings';
-import type { AnalysisResult } from '@/lib/gcode/client';
+import type { AnalyzeResult } from '@/lib/gcode/analyze';
+
+/** Pre-flight only needs the analysis, not the worker's render buffers. */
+type AnalysisResult = Omit<AnalyzeResult, 'checkpoints'>;
 import { machineBounds } from '@/lib/profile/geometry';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength } from '@/lib/profile/units';

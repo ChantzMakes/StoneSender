@@ -3,7 +3,9 @@
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 3 of 8.** Adds a full G-code interpreter, a GRBL planner model for time estimates, job
+> **Status: Phase 4 of 8.** Adds a 3D toolpath viewer (colour by move type, feed, depth or power; live
+> progress; playback scrubber 0.1–100×; top/front/side/3D views, fit, follow; rulers; measuring tool).
+> Phase 3 added a full G-code interpreter, a GRBL planner model for time estimates, job
 > statistics, a G-code editor with hover docs and error markers, drag-and-drop / recent files / history, and
 > a travel check in pre-flight. From Phase 2: Machine profiles and setup wizard, a built-in virtual GRBL controller, job
 > streaming (character counting) with pause/resume/stop and check mode, pre-flight checks, jogging,
@@ -102,6 +104,8 @@ flowchart TB
   `grbl-link/src/serial.rs` and `virtual-grbl/src/port.rs`.
 - **Protocol** — `grbl-core/src/protocol.rs` (every GRBL line type), `status.rs` (status reports incl.
   GRBL 0.9 format), `firmware.rs`.
+- **3D viewer** — `src/features/viewer/`: react-three-fiber scene; one shader-coloured `LineSegments` draw
+  call built in the worker (`src/lib/gcode/render.ts`), playback state in `src/store/sim.ts`.
 - **G-code engine** — `src/lib/gcode/`: modal interpreter → typed-array toolpath → planner (time) → stats,
   in a Web Worker. Cross-checked against the emulator (`scripts/gen-timing-fixtures.mjs`).
 - **Streaming engine** — `grbl-link/src/sender.rs`: character counting / send-response, job state machine,

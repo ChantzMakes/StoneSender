@@ -9,6 +9,8 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   fullyParallel: true,
+  // Software WebGL in headless Chromium is CPU-heavy; too many workers starve each other.
+  workers: 4,
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:1420',

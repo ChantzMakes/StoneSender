@@ -5,6 +5,7 @@
  */
 import { analyze, interpretOptions, type AnalyzeInput } from './analyze';
 import { stateBeforeLine, type Checkpoint, type InterpretOptions } from './interpreter';
+import { buildRenderGeometry, renderTransferables } from './render';
 import { transferables } from './toolpath';
 
 export type WorkerRequest = { type: 'analyze'; id: number; input: AnalyzeInput } | { type: 'stateBefore'; id: number; line: number };
@@ -30,9 +31,13 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
           post({ type: 'progress', id: msg.id, stage, fraction });
         }
       });
+      post({ type: 'progress', id: msg.id, stage: 'Preparing 3D view', fraction: 0 });
+      const settings = msg.input.controllerSettings;
+      const laser = settings?.['32'] !== undefined ? settings['32'] === '1' : msg.input.profile.machineType === 'laser';
+      const render = buildRenderGeometry(result.toolpath, { laser });
       const { checkpoints, ...rest } = result;
       last = { text: msg.input.text, checkpoints, opts: interpretOptions(msg.input) };
-      post({ type: 'result', id: msg.id, result: rest }, [...transferables(result.toolpath), result.lineEndTime.buffer as ArrayBuffer]);
+      post({ type: 'result', id: msg.id, result: { ...rest, render } }, [...transferables(result.toolpath), result.lineEndTime.buffer as ArrayBuffer, ...renderTransferables(render)]);
     } else if (msg.type === 'stateBefore') {
       if (!last) throw new Error('no job analysed yet');
       post({ type: 'result', id: msg.id, result: stateBeforeLine(last.text, { checkpoints: last.checkpoints }, msg.line, last.opts) });

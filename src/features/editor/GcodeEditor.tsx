@@ -14,6 +14,8 @@ import { useAnalysis } from '@/store/analysis';
 import { useApp } from '@/store/app';
 import { sysMessage } from '@/store/console';
 import { isActivePhase, useLink } from '@/store/link';
+import { useSim } from '@/store/sim';
+import { seekToLine } from '../viewer/seek';
 import { setupMonaco } from './monacoSetup';
 
 const monaco = setupMonaco();
@@ -65,7 +67,9 @@ export default function GcodeEditor() {
   }, [markers, dirty, text, mounted]);
 
   // Follow the running line.
-  const currentLine = active ? (job?.currentLine ?? 0) : 0;
+  // During a job: the running line. Otherwise: the 3D playback position.
+  const simLine = useSim((s) => (s.time > 0 ? s.line : 0));
+  const currentLine = active ? (job?.currentLine ?? 0) : simLine;
   useEffect(() => {
     const ed = editorRef.current;
     if (!ed) return;
@@ -152,6 +156,10 @@ export default function GcodeEditor() {
           }}
           onMount={(ed) => {
             editorRef.current = ed;
+            // Clicking / moving to a line moves 3D playback there.
+            ed.onDidChangeCursorPosition((e) => {
+              if (e.reason === monaco.editor.CursorChangeReason.Explicit && e.source !== 'api') seekToLine(e.position.lineNumber);
+            });
             // re-apply markers/decorations now that the editor exists
             setMounted((m) => m + 1);
           }}

@@ -17,6 +17,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/primitives';
 
 // Monaco is large: load it only when the G-code tab is opened.
 const GcodeEditor = lazy(() => import('@/features/editor/GcodeEditor'));
+// three.js is large too: load the 3D view on demand.
+const Viewer3D = lazy(() => import('@/features/viewer/Viewer3D').then((m) => ({ default: m.Viewer3D })));
 import { Console } from '@/features/console/Console';
 import { Dro } from '@/features/dro/Dro';
 import { Banners } from '@/features/layout/Banners';
@@ -25,7 +27,6 @@ import { ProfileManager } from '@/features/profiles/ProfileManager';
 import { ProfileSwitcher } from '@/features/profiles/ProfileSwitcher';
 import { StopButton } from '@/features/safety/StopButton';
 import { SetupWizard } from '@/features/wizard/SetupWizard';
-import { WorkAreaView } from '@/features/workarea/WorkAreaView';
 import { isTauri } from '@/lib/backend';
 import { useApp } from '@/store/app';
 import { useLink } from '@/store/link';
@@ -122,7 +123,7 @@ export default function App() {
                       <div className="flex h-9 shrink-0 items-center border-b px-2">
                         <TabsList className="h-7 p-0.5">
                           <TabsTrigger value="view" className="py-0.5 text-xs">
-                            Work area
+                            3D view
                           </TabsTrigger>
                           <TabsTrigger value="editor" className="py-0.5 text-xs" data-testid="editor-tab">
                             G-code
@@ -131,7 +132,9 @@ export default function App() {
                       </div>
                       <div className="min-h-0 flex-1">
                         {centerTab === 'view' ? (
-                          <WorkAreaView profile={profile} />
+                          <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading 3D view…</div>}>
+                            <Viewer3D profile={profile} />
+                          </Suspense>
                         ) : (
                           <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading editor…</div>}>
                             <GcodeEditor />

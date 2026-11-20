@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-shapeoko",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "Shapeoko 3 (Standard)",
+    "notes": "Typical Shapeoko 3 Standard with belt-drive Z. XL/XXL and Shapeoko 4/5 have different travel; Z-Plus uses $102=200 and HDZ uses $102=320. Values are typical, not official — compare with $$ on connect.",
+    "icon": null,
+    "presetId": "shapeoko"
+  },
+  "units": "mm",
+  "machineType": "router",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 8, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 425, "y": 425, "z": 75 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 760, "y": 700, "z": 400 } },
+    "homeCorner": "back-right",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 5000, "y": 5000, "z": 1500, "a": 3600 },
+    "acceleration": { "x": 400, "y": 400, "z": 50, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 40, "y": 40, "z": 40, "a": 8.889 }
+  },
+  "homing": { "enabled": true, "softLimits": false, "hardLimits": false, "pullOff": 5, "seekRate": 1000, "feedRate": 100, "sequence": "z-then-xy" },
+  "spindle": { "type": "router", "minRpm": 10000, "maxRpm": 30000, "spinUpDelaySec": 4, "supportsM4": false },
+  "laser": { "maxPower": 1000, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 50, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "xyz",
+    "plateThickness": 13,
+    "xyOffset": { "x": 9.525, "y": 9.525 },
+    "fastFeed": 150,
+    "slowFeed": 25,
+    "retract": 3,
+    "maxTravel": 25,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -212, "y": -400, "z": -5 } },
+  "safety": { "safeZMachine": -5, "clearanceZ": 5, "parkPosition": { "x": -5, "y": -5, "z": -5 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 100], "defaultStepMm": 1, "feedXY": 2500, "feedZ": 600 },
+    "stock": { "size": { "x": 300, "y": 200, "z": 19 }, "material": "plywood", "color": "#c8a27a" }
+  }
+}

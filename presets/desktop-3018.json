@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-desktop-3018",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "3018-style desktop CNC",
+    "notes": "CNC 3018 / 3018-PRO style machines (Woodpecker or similar boards). Most ship without homing switches, so homing and soft limits are off. Older boards run GRBL 0.9, which this app will warn about. Some boards use $30=1000 (S1000 = full speed) instead of RPM — check $30 on connect.",
+    "icon": null,
+    "presetId": "desktop-3018"
+  },
+  "units": "mm",
+  "machineType": "router",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 5, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 300, "y": 180, "z": 45 },
+    "gantryStyle": "moving-table",
+    "dualMotorY": false,
+    "frame": { "auto": true, "size": { "x": 400, "y": 330, "z": 240 } },
+    "homeCorner": "back-right",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 1000, "y": 1000, "z": 600, "a": 3600 },
+    "acceleration": { "x": 30, "y": 30, "z": 30, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 800, "y": 800, "z": 800, "a": 8.889 }
+  },
+  "homing": { "enabled": false, "softLimits": false, "hardLimits": false, "pullOff": 1, "seekRate": 500, "feedRate": 25, "sequence": "z-then-xy" },
+  "spindle": { "type": "pwm", "minRpm": 0, "maxRpm": 10000, "spinUpDelaySec": 2, "supportsM4": false },
+  "laser": { "maxPower": 1000, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 1000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 30, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "z",
+    "plateThickness": 1.6,
+    "xyOffset": { "x": 0, "y": 0 },
+    "fastFeed": 100,
+    "slowFeed": 20,
+    "retract": 2,
+    "maxTravel": 20,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -150, "y": -170, "z": -2 } },
+  "safety": { "safeZMachine": -2, "clearanceZ": 3, "parkPosition": { "x": -5, "y": -5, "z": -2 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 50], "defaultStepMm": 1, "feedXY": 800, "feedZ": 300 },
+    "stock": { "size": { "x": 100, "y": 80, "z": 10 }, "material": "softwood", "color": "#d6b48a" }
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "job": "samples/gcode/01-square.nc",
+    "preset": "generic-router",
+    "emulatorSeconds": 26.219,
+    "lines": 20
+  },
+  {
+    "job": "samples/gcode/02-arcs-all-planes.nc",
+    "preset": "generic-router",
+    "emulatorSeconds": 21.125,
+    "lines": 22
+  },
+  {
+    "job": "samples/gcode/03-pocket.nc",
+    "preset": "generic-router",
+    "emulatorSeconds": 42.107,
+    "lines": 39
+  },
+  {
+    "job": "samples/gcode/04-laser-vector.nc",
+    "preset": "generic-laser",
+    "emulatorSeconds": 11.753,
+    "lines": 14
+  },
+  {
+    "job": "samples/gcode/05-laser-raster.nc",
+    "preset": "generic-laser",
+    "emulatorSeconds": 3.696,
+    "lines": 55
+  },
+  {
+    "job": "samples/gcode/06-rotary-a-axis.nc",
+    "preset": "generic-rotary",
+    "flavor": "grblhal",
+    "emulatorSeconds": 74.493,
+    "lines": 14
+  },
+  {
+    "job": "samples/gcode/07-3d-contour.nc",
+    "preset": "generic-router",
+    "emulatorSeconds": 19.391,
+    "lines": 53
+  },
+  {
+    "job": "samples/gcode/01-square.nc",
+    "preset": "desktop-3018",
+    "emulatorSeconds": 35.02,
+    "lines": 20
+  },
+  {
+    "job": "samples/gcode/03-pocket.nc",
+    "preset": "shapeoko",
+    "emulatorSeconds": 42.676,
+    "lines": 39
+  }
+]

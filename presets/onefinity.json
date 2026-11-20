@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-onefinity",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "Onefinity Machinist (GRBL controller)",
+    "notes": "For a Onefinity Machinist frame driven by a GRBL or grblHAL controller. The stock Onefinity controller is not GRBL-based and cannot be used with this app. Ball-screw steps/mm depend on your drivers and microstepping. Values are typical, not official — compare with $$ on connect.",
+    "icon": null,
+    "presetId": "onefinity"
+  },
+  "units": "mm",
+  "machineType": "router",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 10, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 816, "y": 816, "z": 133 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 1100, "y": 1000, "z": 450 } },
+    "homeCorner": "front-left",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 10000, "y": 10000, "z": 3000, "a": 3600 },
+    "acceleration": { "x": 750, "y": 750, "z": 500, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 320, "y": 320, "z": 320, "a": 8.889 }
+  },
+  "homing": { "enabled": true, "softLimits": true, "hardLimits": false, "pullOff": 2, "seekRate": 2500, "feedRate": 200, "sequence": "z-then-xy" },
+  "spindle": { "type": "router", "minRpm": 10000, "maxRpm": 30000, "spinUpDelaySec": 4, "supportsM4": false },
+  "laser": { "maxPower": 1000, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 50, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "xyz",
+    "plateThickness": 15,
+    "xyOffset": { "x": 10, "y": 10 },
+    "fastFeed": 200,
+    "slowFeed": 30,
+    "retract": 3,
+    "maxTravel": 30,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -408, "y": -786, "z": -5 } },
+  "safety": { "safeZMachine": -5, "clearanceZ": 5, "parkPosition": { "x": -811, "y": -811, "z": -5 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 100], "defaultStepMm": 1, "feedXY": 4000, "feedZ": 1000 },
+    "stock": { "size": { "x": 400, "y": 300, "z": 19 }, "material": "hardwood", "color": "#a8764f" }
+  }
+}

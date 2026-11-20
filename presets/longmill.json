@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-longmill",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "Sienci LongMill MK2 (30x30)",
+    "notes": "Typical LongMill MK2 30x30 with 8 mm ACME lead screws on all axes. Homing needs the optional limit switch kit, so it is off here. 48x30 machines have about 1270 mm of X travel. Values are typical, not official — compare with $$ on connect.",
+    "icon": null,
+    "presetId": "longmill"
+  },
+  "units": "mm",
+  "machineType": "router",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 8, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 810, "y": 855, "z": 120 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 1000, "y": 950, "z": 420 } },
+    "homeCorner": "front-left",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 4000, "y": 4000, "z": 3000, "a": 3600 },
+    "acceleration": { "x": 750, "y": 750, "z": 500, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 200, "y": 200, "z": 200, "a": 8.889 }
+  },
+  "homing": { "enabled": false, "softLimits": false, "hardLimits": false, "pullOff": 3, "seekRate": 1500, "feedRate": 100, "sequence": "z-then-xy" },
+  "spindle": { "type": "router", "minRpm": 10000, "maxRpm": 30000, "spinUpDelaySec": 4, "supportsM4": false },
+  "laser": { "maxPower": 255, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 50, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "xyz",
+    "plateThickness": 10,
+    "xyOffset": { "x": 10, "y": 10 },
+    "fastFeed": 150,
+    "slowFeed": 75,
+    "retract": 4,
+    "maxTravel": 25,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -405, "y": -825, "z": -5 } },
+  "safety": { "safeZMachine": -5, "clearanceZ": 5, "parkPosition": { "x": -805, "y": -850, "z": -5 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 100], "defaultStepMm": 1, "feedXY": 3000, "feedZ": 1000 },
+    "stock": { "size": { "x": 400, "y": 300, "z": 19 }, "material": "plywood", "color": "#c8a27a" }
+  }
+}

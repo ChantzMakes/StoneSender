@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-x-carve",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "X-Carve 1000 mm",
+    "notes": "Typical X-Carve 1000 mm. Older frames report $130/$131=790, newer ones 740/790. $102 is ~188.98 for the ACME Z screw. Values are typical, not official — compare with $$ on connect.",
+    "icon": null,
+    "presetId": "x-carve"
+  },
+  "units": "mm",
+  "machineType": "router",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 8, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 750, "y": 750, "z": 65 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 1000, "y": 1000, "z": 380 } },
+    "homeCorner": "front-left",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 8000, "y": 8000, "z": 500, "a": 3600 },
+    "acceleration": { "x": 500, "y": 500, "z": 50, "a": 100 },
+    "junctionDeviation": 0.02,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 40, "y": 40, "z": 188.976, "a": 8.889 }
+  },
+  "homing": { "enabled": true, "softLimits": false, "hardLimits": false, "pullOff": 1, "seekRate": 750, "feedRate": 25, "sequence": "z-then-xy" },
+  "spindle": { "type": "router", "minRpm": 16000, "maxRpm": 27000, "spinUpDelaySec": 4, "supportsM4": false },
+  "laser": { "maxPower": 1000, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 50, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "z",
+    "plateThickness": 12.7,
+    "xyOffset": { "x": 0, "y": 0 },
+    "fastFeed": 150,
+    "slowFeed": 25,
+    "retract": 3,
+    "maxTravel": 25,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -375, "y": -720, "z": -5 } },
+  "safety": { "safeZMachine": -5, "clearanceZ": 5, "parkPosition": { "x": -745, "y": -745, "z": -5 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 100], "defaultStepMm": 1, "feedXY": 3000, "feedZ": 400 },
+    "stock": { "size": { "x": 300, "y": 200, "z": 19 }, "material": "plywood", "color": "#c8a27a" }
+  }
+}

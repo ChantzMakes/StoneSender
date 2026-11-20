@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-generic-laser",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "Generic diode laser",
+    "notes": "Typical open-frame diode laser engraver running GRBL 1.1 with laser mode ($32=1). Many of these have no Z motor; the Z travel is only used for focus height.",
+    "icon": null,
+    "presetId": "generic-laser"
+  },
+  "units": "mm",
+  "machineType": "laser",
+  "controller": { "firmware": "auto", "baudRate": 115200, "statusPollHz": 8, "streamingMode": "character-counting", "rxBufferSize": 128 },
+  "geometry": {
+    "envelope": { "x": 400, "y": 400, "z": 10 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 560, "y": 520, "z": 150 } },
+    "homeCorner": "back-left",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 6000, "y": 6000, "z": 500, "a": 3600 },
+    "acceleration": { "x": 1500, "y": 1500, "z": 100, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 80, "y": 80, "z": 400, "a": 8.889 }
+  },
+  "homing": { "enabled": true, "softLimits": true, "hardLimits": false, "pullOff": 2, "seekRate": 3000, "feedRate": 300, "sequence": "z-then-xy" },
+  "spindle": { "type": "pwm", "minRpm": 0, "maxRpm": 1000, "spinUpDelaySec": 0, "supportsM4": true },
+  "laser": { "maxPower": 1000, "laserMode": true, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "M8" },
+  "rotary": { "mode": "y-substitution", "axisParallelTo": "x", "defaultStockDiameter": 70, "diameterHandling": "ask-per-job", "yMmPerRevolution": 220 },
+  "probe": {
+    "plateType": "none",
+    "plateThickness": 0,
+    "xyOffset": { "x": 0, "y": 0 },
+    "fastFeed": 150,
+    "slowFeed": 25,
+    "retract": 3,
+    "maxTravel": 10,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "ignore", "position": { "x": -200, "y": -370, "z": 0 } },
+  "safety": { "safeZMachine": 0, "clearanceZ": 0, "parkPosition": { "x": -395, "y": -5, "z": 0 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.1, 1, 10, 50, 100], "defaultStepMm": 10, "feedXY": 3000, "feedZ": 300 },
+    "stock": { "size": { "x": 300, "y": 300, "z": 3 }, "material": "plywood", "color": "#d9b98c" }
+  }
+}

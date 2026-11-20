@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "preset-generic-rotary",
+  "createdAt": "2026-11-19T00:00:00.000Z",
+  "updatedAt": "2026-11-19T00:00:00.000Z",
+  "identity": {
+    "name": "Router with 4th axis (A)",
+    "notes": "A 3-axis router with a true A-axis rotary (needs grblHAL or a 4-axis GRBL build). The rotary axis runs parallel to X. A-axis values are in degrees.",
+    "icon": null,
+    "presetId": "generic-rotary"
+  },
+  "units": "mm",
+  "machineType": "rotary",
+  "controller": { "firmware": "grblhal", "baudRate": 115200, "statusPollHz": 8, "streamingMode": "character-counting", "rxBufferSize": 1024 },
+  "geometry": {
+    "envelope": { "x": 400, "y": 400, "z": 100 },
+    "gantryStyle": "moving-gantry",
+    "dualMotorY": true,
+    "frame": { "auto": true, "size": { "x": 560, "y": 520, "z": 320 } },
+    "homeCorner": "back-right",
+    "zHomeDirection": "up",
+    "coordinateMode": "negative-space"
+  },
+  "motion": {
+    "maxRate": { "x": 5000, "y": 5000, "z": 1000, "a": 3600 },
+    "acceleration": { "x": 500, "y": 500, "z": 200, "a": 100 },
+    "junctionDeviation": 0.01,
+    "arcTolerance": 0.002,
+    "stepsPerUnit": { "x": 80, "y": 80, "z": 400, "a": 8.889 }
+  },
+  "homing": { "enabled": true, "softLimits": true, "hardLimits": false, "pullOff": 2, "seekRate": 2000, "feedRate": 100, "sequence": "z-then-xy" },
+  "spindle": { "type": "pwm", "minRpm": 0, "maxRpm": 24000, "spinUpDelaySec": 4, "supportsM4": true },
+  "laser": { "maxPower": 1000, "laserMode": false, "defaultM4Dynamic": true, "focusHeight": 0, "framingFeed": 3000, "framingPowerPercent": 0, "airAssist": "none" },
+  "rotary": { "mode": "a-axis", "axisParallelTo": "x", "defaultStockDiameter": 50, "diameterHandling": "ask-per-job", "yMmPerRevolution": 360 },
+  "probe": {
+    "plateType": "z",
+    "plateThickness": 15,
+    "xyOffset": { "x": 10, "y": 10 },
+    "fastFeed": 150,
+    "slowFeed": 25,
+    "retract": 3,
+    "maxTravel": 25,
+    "toolSetter": { "enabled": false, "position": { "x": -10, "y": -10, "z": -5 } }
+  },
+  "toolChange": { "strategy": "pause-reprobe", "position": { "x": -200, "y": -370, "z": -5 } },
+  "safety": { "safeZMachine": -5, "clearanceZ": 10, "parkPosition": { "x": -5, "y": -5, "z": -5 } },
+  "defaults": {
+    "jog": { "stepsMm": [0.01, 0.1, 1, 10, 100], "defaultStepMm": 1, "feedXY": 2000, "feedZ": 500 },
+    "stock": { "size": { "x": 200, "y": 50, "z": 50 }, "material": "hardwood", "color": "#a8764f" }
+  }
+}

@@ -1,0 +1,55 @@
+( 07-3d-contour.nc — small 3D dome, 3 mm ball end mill, parallel finishing in X. )
+( Hand-written approximate dome, 30 x 30 mm, 5 mm stepover — a coarse 3D test, not a finishing toolpath. )
+G21 G90 G94
+M3 S18000
+G4 P4
+G0 Z5
+G0 X-15 Y-15
+G1 Z0 F400
+G1 X-15 Y-15 Z-5 F1200
+G1 X-10 Y-15 Z-5
+G1 X-5 Y-15 Z-5
+G1 X0 Y-15 Z-5
+G1 X5 Y-15 Z-5
+G1 X10 Y-15 Z-5
+G1 X15 Y-15 Z-5
+G1 X15 Y-10 Z-5
+G1 X10 Y-10 Z-3.0
+G1 X5 Y-10 Z-1.464
+G1 X0 Y-10 Z-1.0
+G1 X-5 Y-10 Z-1.464
+G1 X-10 Y-10 Z-3.0
+G1 X-15 Y-10 Z-5
+G1 X-15 Y-5 Z-5
+G1 X-10 Y-5 Z-1.464
+G1 X-5 Y-5 Z-0.233
+G1 X0 Y-5 Z0
+G1 X5 Y-5 Z-0.233
+G1 X10 Y-5 Z-1.464
+G1 X15 Y-5 Z-5
+G1 X15 Y0 Z-5
+G1 X10 Y0 Z-1.0
+G1 X5 Y0 Z0
+G1 X0 Y0 Z0
+G1 X-5 Y0 Z0
+G1 X-10 Y0 Z-1.0
+G1 X-15 Y0 Z-5
+G1 X-15 Y5 Z-5
+G1 X-10 Y5 Z-1.464
+G1 X-5 Y5 Z-0.233
+G1 X0 Y5 Z0
+G1 X5 Y5 Z-0.233
+G1 X10 Y5 Z-1.464
+G1 X15 Y5 Z-5
+G1 X15 Y10 Z-5
+G1 X10 Y10 Z-3.0
+G1 X5 Y10 Z-1.464
+G1 X0 Y10 Z-1.0
+G1 X-5 Y10 Z-1.464
+G1 X-10 Y10 Z-3.0
+G1 X-15 Y10 Z-5
+G1 X-15 Y15 Z-5
+G1 X15 Y15 Z-5
+G0 Z5
+M5
+M30

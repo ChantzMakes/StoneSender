@@ -1,0 +1,23 @@
+[package]
+name = "cnc-sender"
+description = "G-code sender, visualizer and machine simulator for GRBL"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "cnc_sender_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+grbl-core = { path = "../crates/grbl-core" }
+grbl-link = { path = "../crates/grbl-link" }
+virtual-grbl = { path = "../crates/virtual-grbl" }

@@ -141,6 +141,34 @@ raise to the safe height, spindle on and wait, move over the start point, feed d
 own settings. Some files can't be restarted part-way (if the skipped part sets offsets or probes) — the
 app says why. Make sure the right bit is in the spindle.
 
+### Framing (lasers)
+
+*Frame* in the Job panel moves the head around the outline of the job so you can see where it will burn.
+With the profile's framing power at 0 % the laser stays off; above 0 % it glows faintly while moving (this
+needs laser mode, `$32=1`). Wear your laser glasses either way.
+
+### Generating and changing jobs
+
+*Generate a job…* makes simple jobs without CAM: **surfacing** (flatten stock or a spoilboard), a
+**rectangular or round pocket**, **drilling** in a grid or a bolt circle (with pecking), and an **outline
+trace** that moves around a loaded job at a safe height with the spindle off. *Transform…* makes a changed
+copy of the loaded job: move it, rotate it, mirror it, scale it, turn arcs into lines, or speed up / slow
+down all feeds. Both open the result as a new file — look at it in the 3D view, then run it as usual.
+
+### Macros
+
+The **Macros** panel holds your own buttons. The pencil edits them: a label and the G-code to send. Write
+`{depth}` or `{depth=2}` to be asked for a value each time, and `{wx}` `{wy}` `{wz}` (work position),
+`{mx}` `{my}` `{mz}` (machine position), `{safeZ}`, `{clearance}` to use the current values (all mm).
+Export them to share with friends; when you import a file, every macro is shown in full and you tick the
+ones to add. Macros can't change controller settings.
+
+### Gamepad
+
+Plug in a game controller and **hold LB**: the left stick jogs X/Y (push further = faster), the right stick
+jogs Z, the D-pad jogs one step in X/Y and Y / A step Z up / down. Let go of LB and it stops. The gamepad
+can't start jobs or set zero.
+
 ### Probing
 
 *Probe…* (Machine panel) opens the probing wizards. Each one shows a little animation of what will happen.

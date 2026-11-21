@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input, PanelTitle, Tip } from '@/components/ui/primitives';
 import { backend } from '@/lib/backend';
 import { stepJog } from '@/lib/grbl/commands';
+import { useGamepad } from './useGamepad';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { fromDisplay, roundForDisplay, toDisplay, unitLabel } from '@/lib/profile/units';
 import { cn, errorMessage } from '@/lib/utils';
@@ -127,6 +128,7 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
   const [feedXY, setFeedXY] = useState(profile.defaults.jog.feedXY);
   const [feedZ, setFeedZ] = useState(profile.defaults.jog.feedZ);
   const { begin, end } = useJogger(profile, feedXY, feedZ, stepMm);
+  const pad = useGamepad({ profile, available, feedXY, feedZ, stepMm, accel: (d) => accelFor(profile, useLink.getState().controller?.settings, d) });
 
   useEffect(() => {
     setStepMm(profile.defaults.jog.defaultStepMm);
@@ -183,6 +185,11 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
     <div className="flex flex-col">
       <PanelTitle>Jog</PanelTitle>
       <div className="flex flex-col gap-3 p-3">
+        {pad.connected && (
+          <div className={cn('rounded-md border px-2 py-1 text-xs', pad.enabled ? 'border-warning/60 bg-warning/10' : 'text-muted-foreground')} data-testid="gamepad-status">
+            🎮 {pad.jogging ? 'Gamepad jogging' : pad.enabled ? 'Gamepad enabled — sticks jog, D-pad steps' : 'Gamepad connected — hold LB to jog'}
+          </div>
+        )}
         <div className="flex gap-3">
           <div className="grid flex-1 grid-cols-3 gap-1.5">
             <div />

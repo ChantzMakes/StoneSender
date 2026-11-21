@@ -1,5 +1,6 @@
 /** App-wide preferences, persisted via the backend (app-settings.json). */
 import { z } from 'zod';
+import { defaultMacros, MacroSchema } from '@/lib/macros';
 import { create } from 'zustand';
 import { backend } from '@/lib/backend';
 import { defaultTools, ToolSchema } from '@/lib/sim/tools';
@@ -48,6 +49,17 @@ const AppSettingsSchema = z.object({
   tools: z.array(ToolSchema).default(() => defaultTools()),
   /** Simulation grid resolution in mm (0 = automatic) */
   simResolution: z.number().min(0).max(5).default(0),
+  /** Macro buttons (Phase 7b) */
+  macros: z.array(MacroSchema).default(() => defaultMacros()),
+  /** Gamepad jogging (Phase 7b) */
+  gamepad: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Button index that must be held to jog (4 = LB, 5 = RB on standard mapping) */
+      enableButton: z.number().int().min(0).max(16).default(4),
+      deadzone: z.number().min(0.05).max(0.6).default(0.2),
+    })
+    .default({}),
 });
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

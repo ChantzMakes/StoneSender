@@ -127,3 +127,23 @@ describe('height map probing', () => {
     expect(m.workPos[2]).toBeCloseTo(3);
   });
 });
+
+describe('laser framing', () => {
+  it('traces the job bounds; laser only with M4 in laser mode', async () => {
+    const { frameJob } = await import('./routines');
+    const laser = profileFromPreset('generic-laser');
+    laser.laser.framingPowerPercent = 1;
+    const m = machine([], [0, 0, 0]);
+    await frameJob(io(m), { min: [10, 20, 0], max: [60, 50, 0] }, laser, true);
+    const moves = m.log.filter((l) => l.startsWith('G1'));
+    expect(moves).toHaveLength(4);
+    expect(m.log).toContain(`M4S${Math.round(laser.laser.maxPower / 100)}`);
+    expect(m.log.at(-3)).toBe('M5');
+    expect(m.workPos.slice(0, 2)).toEqual([10, 20]);
+    await expect(frameJob(io(new DemoMachine()), { min: [0, 0, 0], max: [1, 1, 0] }, laser, false)).rejects.toThrow('laser mode');
+    laser.laser.framingPowerPercent = 0;
+    const off = machine([], [0, 0, 0]);
+    await frameJob(io(off), { min: [0, 0, 0], max: [5, 5, 0] }, laser, false);
+    expect(off.log.some((l) => l.startsWith('M4') || l.startsWith('M3'))).toBe(false);
+  });
+});

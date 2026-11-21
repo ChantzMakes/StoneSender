@@ -11,9 +11,9 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 4 | 3D toolpath viewer, live tool tracking, scrubber/playback, camera views, rulers, measuring | **done** |
 | 5 | Parametric machine model (router/laser/combo/rotary, gantry/table kinematics), accel-aware playback, travel/below-stock/rapid-through-stock checks in the view and pre-flight | **done** |
 | 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | **done** |
-| 7a | Start-from-line, guided tool changes, probing wizards, height-map auto-leveling | **done** (awaiting review) |
-| 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | next |
-| 8 | Polish / distribution | — |
+| 7a | Start-from-line, guided tool changes, probing wizards, height-map auto-leveling | **done** |
+| 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | **done** (awaiting review) |
+| 8 | Polish / distribution | next |
 
 ## Commands
 
@@ -35,10 +35,11 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
 
-All of the above pass as of the end of Phase 7a (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
-tests against the emulator; Vitest: 130 incl. 9 planner-vs-emulator timing checks, removal/export, recovery,
-probing routines and leveling; Playwright: 29, run with 4 workers because headless Chromium renders WebGL in
-software — long flows use `test.slow()`; clippy clean with `-D warnings`).
+All of the above pass as of the end of Phase 7b (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
+tests against the emulator; Vitest: 153 incl. planner-vs-emulator timing, removal/export, recovery, probing,
+leveling, transforms, generators, macros and gamepad mapping; Playwright: 33, run with 4 workers because headless
+Chromium renders WebGL in software — `freshApp` sets a 1 mm simulation grid and long flows use `test.slow()`;
+clippy clean with `-D warnings`).
 
 ## Layout
 
@@ -186,6 +187,25 @@ docs/USER_GUIDE.md
 25. **Auto-leveling** rewrites the loaded file as `<name>-leveled.nc` (the original stays on disk): Z of every
     move + bilinear surface height; moves split to ≤ half the grid spacing; G17 arcs become lines. Refused for
     G91 moves, arcs in G18/G19 and G92. Z0 must be set on the surface before probing the map.
+26. **Laser framing** traces the job's cut bounds (work X/Y, current Z) at `laser.framingFeed`. At 0 %
+    `framingPowerPercent` the laser stays off (M5). Above 0 % it uses **M4** (dynamic: off whenever the head
+    stops) and is **refused unless the controller is in laser mode ($32=1)** — with M3, or without laser
+    mode, the laser would stay on while stopped at the corners. M5 is sent afterwards even if a move fails.
+27. **Macros** send line by line (tracked; each waits for `ok`), are refused while a job runs, and may not
+    contain real-time characters or settings writes / resets (`$n=`, `$RST`, `$SLP`) — settings go
+    through the `$$` editor (decision 16). Imported macros are shown in full and must be ticked one by one
+    (macros with such problems can't be ticked); importing never sends anything. "Stop sending" in the
+    panel stops queueing further lines; motion already queued finishes — STOP halts it.
+28. **Generators and transforms never send anything**: their output opens as a new job file
+    (`surfacing.nc`, `<name>-rotated.nc`, …) and goes through analysis, the 3D view and pre-flight like
+    any file. Pockets plunge straight down in the centre (the dialog says so); drilling pecks retract to
+    1 mm above Z0. Transform amounts are mm (converted for G20 files); G53/G28/G30/G10/G92/G38 lines are
+    copied unchanged (with a warning for offsets).
+29. **Gamepad (owner decision): hold-to-enable.** Nothing moves unless the enable button (LB, button 4 on
+    the standard mapping) is held. Left stick jogs X/Y proportionally, right stick vertical jogs Z (alone),
+    D-pad / Y / A buttons step-jog; it uses the same continuous-jog engine (heartbeats, cancel on release).
+    Releasing the button, centring the stick, losing the pad, window blur or tab hide stops the jog. The
+    gamepad never runs jobs, zeroes or homes.
 
 ## G-code engine conventions (Phase 3)
 
@@ -283,6 +303,18 @@ docs/USER_GUIDE.md
 - drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
 - With the machine model hidden, moving-table machines no longer slide the job in Y.
 
+## Phase 7b conventions
+
+- `lib/gcode/transform.ts`: rigid transforms keep arcs (I/J rotated as vectors, mirror swaps G2/G3 and adds
+  the G word to modal arcs, R scaled); non-uniform scale converts G17 arcs to lines; G18/G19 arcs are
+  refused for rotate/mirror/scale; G91 moves get only the linear part. Comments are kept on rewritten
+  lines. `lib/gcode/generators.ts`: pure functions returning `{ name, text, errors }`.
+- Macros live in `settings.macros` (`lib/macros.ts`: schema, `{var}` / `{var=default}` prompts, built-ins
+  `{wx wy wz mx my mz safeZ clearance}` in mm, file format `cnc-sender-macros` v1 without ids).
+- Gamepad: `lib/machine/gamepad.ts` (pure mapping, unit tested), `features/jog/useGamepad.ts` (rAF poll,
+  restarts the jog only on > 8° / > 20 % change, at most every 150 ms; heartbeats every 100 ms).
+  `settings.gamepad` { enabled, enableButton, deadzone } has no UI yet (defaults: on, LB, 0.2).
+
 ## Phase 7a conventions
 
 - **Tracked commands:** `Link::send_tracked(line, id)` → `LinkEvent::CommandAck { id, error, message, dropped }`;
@@ -332,6 +364,18 @@ Not modelled (yet): hard-limit switches (only via fault injection), safety door,
 spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, serial baud timing.
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
+
+## Known gaps after Phase 7b
+
+- Gamepad settings (enable button, dead zone, on/off) exist in the settings file but have no UI; only
+  standard-mapping pads were considered; tested with a stubbed Gamepad API, not a real controller.
+- Laser framing traces the bounding rectangle only (no convex hull); it can't be stopped from its own
+  button (use STOP).
+- Generators are basic: pockets plunge (no ramp/helix), no tabs, no cutter-compensated profiles; surfacing
+  is zig-zag only. Transforms work on the text: modal-only lines such as a bare `X10` after a rotation are
+  rewritten with both axes, which changes line lengths (checked against the 79-character GRBL limit only
+  by the normal scan on load).
+- Macros can't branch or loop; variables are plain numbers.
 
 ## Known gaps after Phase 7a
 

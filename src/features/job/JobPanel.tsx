@@ -1,5 +1,5 @@
 /** Job panel: open a file, pre-flight, run/check, pause/resume/stop, progress. */
-import { FileUp, History, ListStart, Pause, Play, ShieldCheck, Square, X } from 'lucide-react';
+import { FileUp, Frame, History, ListStart, Pause, Play, Shapes, ShieldCheck, Square, Wand2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge, PanelTitle, Tip } from '@/components/ui/primitives';
@@ -17,6 +17,10 @@ import { JobStats } from './JobStats';
 import { PreflightDialog } from './PreflightDialog';
 import { type StartFrom, StartFromLineDialog } from './StartFromLineDialog';
 import { ToolChangePanel } from './ToolChangePanel';
+import { GenerateDialog } from './GenerateDialog';
+import { TransformDialog } from './TransformDialog';
+import { liveIO } from '@/lib/machine/liveIO';
+import { frameJob } from '@/lib/machine/routines';
 
 export { formatDuration };
 
@@ -46,6 +50,27 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
   const [preflightMode, setPreflightMode] = useState<JobMode | null>(null);
   const [startFrom, setStartFrom] = useState<StartFrom | null>(null);
   const [startLineOpen, setStartLineOpen] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [transformOpen, setTransformOpen] = useState(false);
+  const [framing, setFraming] = useState(false);
+  const controller = useLink((s) => s.controller);
+  const idle = useLink((s) => s.status?.state?.name === 'idle');
+  const laserHead = profile.machineType === 'laser' || profile.machineType === 'router-laser';
+
+  const frame = async () => {
+    const b = analysis?.stats.cutBounds;
+    if (!b || b.empty) return;
+    setFraming(true);
+    try {
+      const laserMode = controller?.settings['32'] !== undefined ? controller.settings['32'] === '1' : profile.laser.laserMode;
+      await frameJob(liveIO(new AbortController().signal), b, profile, laserMode);
+      sysMessage('Framing done.');
+    } catch (e) {
+      sysMessage(`Framing stopped: ${errorMessage(e)}`, 'error');
+    } finally {
+      setFraming(false);
+    }
+  };
   const active = isActivePhase(job?.phase);
 
   const act = (f: () => Promise<void>) => f().catch((e) => sysMessage(errorMessage(e), 'error'));
@@ -87,6 +112,11 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
               <FileUp /> Open G-code file…
             </Button>
             <p className="text-center text-xs text-muted-foreground">or drop a file on the window</p>
+            {profile.machineType !== 'laser' && (
+              <Button variant="ghost" size="sm" onClick={() => setGenerateOpen(true)} data-testid="open-generate">
+                <Shapes /> Generate a job (surfacing, pocket, drilling)…
+              </Button>
+            )}
             {recent.length > 0 && (
               <div className="flex flex-col gap-0.5">
                 <div className="text-xs font-medium text-muted-foreground">Recent</div>
@@ -143,6 +173,22 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
             <Button variant="ghost" size="sm" className="col-span-2 h-7 text-xs" data-testid="start-from-line" disabled={!connected || !analysis} onClick={() => setStartLineOpen(true)}>
               <ListStart /> Start from a line…
             </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" data-testid="open-transform" disabled={!analysis} onClick={() => setTransformOpen(true)}>
+              <Wand2 /> Transform…
+            </Button>
+            {laserHead ? (
+              <Tip content={profile.laser.framingPowerPercent > 0 ? `Trace the job outline at ${profile.laser.framingPowerPercent}% power` : 'Trace the job outline with the laser off'}>
+                <span>
+                  <Button variant="ghost" size="sm" className="h-7 w-full text-xs" data-testid="frame-job" disabled={!connected || !idle || !analysis || framing} onClick={() => void frame()}>
+                    <Frame /> Frame
+                  </Button>
+                </span>
+              </Tip>
+            ) : (
+              <Button variant="ghost" size="sm" className="h-7 text-xs" data-testid="open-generate-loaded" onClick={() => setGenerateOpen(true)}>
+                <Shapes /> Generate…
+              </Button>
+            )}
           </div>
         )}
 
@@ -228,6 +274,8 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
         }}
       />
       <JobHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+      {profile.machineType !== 'laser' && <GenerateDialog open={generateOpen} onOpenChange={setGenerateOpen} profile={profile} />}
+      <TransformDialog open={transformOpen} onOpenChange={setTransformOpen} profile={profile} />
     </div>
   );
 }

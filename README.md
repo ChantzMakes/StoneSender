@@ -3,7 +3,10 @@
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 7a of 8.** Adds start-from-line with modal recovery, guided tool changes (pause, touch-plate
+> **Status: Phase 7b of 8.** Adds laser framing, macro buttons with variables (shareable as files, reviewed on
+> import), generators (surfacing, pockets, drilling patterns, outline trace), G-code transforms (move, rotate,
+> mirror, scale, arcs → lines, feed scaling) and gamepad jogging with a hold-to-enable button.
+> Phase 7a added start-from-line with modal recovery, guided tool changes (pause, touch-plate
 > re-probe or fixed tool setter), probing wizards (Z plate, XYZ corner, hole/boss centre, tool setter) with a
 > required probe connection test, and surface height-map probing with auto-leveling of the job.
 > Phase 6 added material-removal simulation: stock is cut away as the job plays

@@ -8,6 +8,7 @@ import { MachineControls } from '@/features/control/MachineControls';
 import { OverridesPanel } from '@/features/control/OverridesPanel';
 import { JobPanel } from '@/features/job/JobPanel';
 import { JogPanel } from '@/features/jog/JogPanel';
+import { MacroPanel } from '@/features/macros/MacroPanel';
 import { GrblSettingsDialog } from '@/features/settings/GrblSettingsDialog';
 import { WcsDialog } from '@/features/wcs/WcsDialog';
 import { useUi } from '@/store/ui';
@@ -154,6 +155,8 @@ export default function App() {
                 <JobPanel profile={profile} />
                 <div className="border-t" />
                 <JogPanel profile={profile} />
+                <div className="border-t" />
+                <MacroPanel profile={profile} />
               </Panel>
             </PanelGroup>
           ) : (

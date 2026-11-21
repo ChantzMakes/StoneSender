@@ -286,3 +286,37 @@ export async function probeHeightMap(io: MachineIO, s: ProbeSettings, g: GridSpe
     return { x0: g.x0, y0: g.y0, dx: dx || 1, dy: dy || 1, nx: g.nx, ny: g.ny, z };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Laser framing
+// ---------------------------------------------------------------------------
+
+/**
+ * Trace the job's bounding rectangle (work X/Y, current Z) so the user can
+ * see where it will burn. At 0 % power the laser stays off. Above 0 % it is
+ * fired with M4 (dynamic power: off whenever the head is not moving), which
+ * is only allowed when the controller is in laser mode ($32=1) — otherwise
+ * M4 would keep it on while stopped at the corners.
+ */
+export async function frameJob(io: MachineIO, b: { min: ArrayLike<number>; max: ArrayLike<number> }, profile: MachineProfile, laserModeOn: boolean): Promise<void> {
+  const pct = profile.laser.framingPowerPercent;
+  if (pct > 0 && !laserModeOn) throw new Error('Framing with the laser on needs laser mode ($32=1) on the controller. Set the framing power to 0 % or turn laser mode on.');
+  const s = Math.round((pct / 100) * profile.laser.maxPower);
+  const [x0, y0, x1, y1] = [b.min[0]!, b.min[1]!, b.max[0]!, b.max[1]!];
+  const feed = profile.laser.framingFeed;
+  await withModes(io, async () => {
+    io.step?.(pct > 0 ? `Framing at ${pct}% power…` : 'Framing with the laser off…');
+    await io.send('M5');
+    await io.send(`G90 G0 X${n(x0)} Y${n(y0)}`);
+    if (pct > 0) await io.send(`M4 S${s}`);
+    try {
+      await io.send(`G1 X${n(x1)} Y${n(y0)} F${n(feed)}`);
+      await io.send(`G1 X${n(x1)} Y${n(y1)}`);
+      await io.send(`G1 X${n(x0)} Y${n(y1)}`);
+      await io.send(`G1 X${n(x0)} Y${n(y0)}`);
+    } finally {
+      await io.send('M5').catch(() => {});
+    }
+    await io.send('G4 P0');
+  });
+}

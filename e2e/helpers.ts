@@ -2,7 +2,12 @@ import { expect, type Page } from '@playwright/test';
 
 export async function freshApp(page: Page) {
   await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
+  // Coarse (1 mm) material simulation: headless Chromium renders WebGL in software, and a full-resolution
+  // heightfield on every loaded job slows the parallel suite into timeouts.
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('cnc-sender.app-settings', JSON.stringify({ simResolution: 1 }));
+  });
   await page.reload();
 }
 

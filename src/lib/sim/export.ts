@@ -86,7 +86,7 @@ export function heightfieldStl(grid: Grid, data: Float32Array, bottom: number, n
   // bottom (normal −Z)
   w.tri(xa, ya, bottom, xb, yb, bottom, xb, ya, bottom);
   w.tri(xa, ya, bottom, xa, yb, bottom, xb, yb, bottom);
-  return w.finish(`binary STL ${name} - CNC Sender material removal`);
+  return w.finish(`binary STL ${name} - StoneSender material removal`);
 }
 
 /** Closed solid of rotary stock: radius map around the X axis, with end caps. */
@@ -112,7 +112,7 @@ export function rotaryStl(grid: Grid, data: Float32Array, name = 'rotary stock')
     w.tri(xa, 0, 0, ...P(0, j + 1), ...P(0, j));
     w.tri(xb, 0, 0, ...P(nx - 1, j), ...P(nx - 1, j + 1));
   }
-  return w.finish(`binary STL ${name} - CNC Sender material removal`);
+  return w.finish(`binary STL ${name} - StoneSender material removal`);
 }
 
 /** Volume enclosed by a binary STL (divergence theorem) — used by tests. */

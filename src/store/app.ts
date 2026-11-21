@@ -29,6 +29,8 @@ const AppSettingsSchema = z.object({
       swapSides: z.boolean().default(false),
     })
     .default(DEFAULT_LAYOUT),
+  /** Look for a new version on github.com when the app starts (Phase 8b) */
+  updates: z.object({ checkOnStartup: z.boolean().default(true) }).default({}),
   /** Keyboard shortcut overrides: action id → key name, or null for none (lib/shortcuts.ts) */
   shortcuts: z.record(z.string(), z.string().nullable()).default({}),
   activeProfileId: z.string().nullable().default(null),

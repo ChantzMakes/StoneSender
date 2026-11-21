@@ -1,12 +1,12 @@
 [package]
-name = "cnc-sender"
+name = "stonesender"
 description = "G-code sender, visualizer and machine simulator for GRBL"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "cnc_sender_lib"
+name = "stonesender_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -21,3 +21,7 @@ log.workspace = true
 grbl-core = { path = "../crates/grbl-core" }
 grbl-link = { path = "../crates/grbl-link" }
 virtual-grbl = { path = "../crates/virtual-grbl" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"

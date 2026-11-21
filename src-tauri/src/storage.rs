@@ -43,6 +43,35 @@ impl Storage {
         &self.root
     }
 
+    /// One-time copy from the folder of an earlier app identifier (test builds
+    /// were `dev.cncsender.app`). Runs only while this folder has no settings and
+    /// no profiles, copies profiles and settings (never deletes the old folder),
+    /// and returns how many files were copied.
+    pub fn migrate_from(&self, old_root: &Path) -> io::Result<usize> {
+        let empty = !self.root.join("app-settings.json").exists() && fs::read_dir(self.root.join("profiles"))?.next().is_none();
+        if !empty || !old_root.is_dir() || old_root == self.root {
+            return Ok(0);
+        }
+        let mut copied = 0;
+        if let Ok(entries) = fs::read_dir(old_root.join("profiles")) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("json") {
+                    if let Some(name) = p.file_name() {
+                        fs::copy(&p, self.root.join("profiles").join(name))?;
+                        copied += 1;
+                    }
+                }
+            }
+        }
+        let settings = old_root.join("app-settings.json");
+        if settings.is_file() {
+            fs::copy(&settings, self.root.join("app-settings.json"))?;
+            copied += 1;
+        }
+        Ok(copied)
+    }
+
     /// Raw JSON of every stored profile. The frontend migrates and validates
     /// (older schema versions are allowed here on purpose). Unreadable files
     /// are reported, not silently dropped.
@@ -101,7 +130,7 @@ mod tests {
     use super::*;
 
     fn temp_root(name: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("cnc-sender-test-{name}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("stonesender-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         p
     }
@@ -123,6 +152,25 @@ mod tests {
         s.delete_profile("abc-123").unwrap();
         assert!(s.list_profiles().unwrap().is_empty());
         let _ = fs::remove_dir_all(s.root());
+    }
+
+    #[test]
+    fn migrates_once_from_the_old_folder() {
+        let old = Storage::new(temp_root("old")).unwrap();
+        let mut p = preset();
+        p["id"] = "kept".into();
+        old.save_profile(p).unwrap();
+        old.save_app_settings(&serde_json::json!({ "theme": "light" })).unwrap();
+        let new = Storage::new(temp_root("new")).unwrap();
+        assert_eq!(new.migrate_from(old.root()).unwrap(), 2);
+        assert_eq!(new.list_profiles().unwrap()[0]["id"], "kept");
+        assert_eq!(new.load_app_settings().unwrap().unwrap()["theme"], "light");
+        // never twice, never over existing data, and the old folder stays
+        assert_eq!(new.migrate_from(old.root()).unwrap(), 0);
+        assert!(old.root().join("app-settings.json").exists());
+        assert_eq!(new.migrate_from(Path::new("does-not-exist")).unwrap(), 0);
+        let _ = fs::remove_dir_all(old.root());
+        let _ = fs::remove_dir_all(new.root());
     }
 
     #[test]

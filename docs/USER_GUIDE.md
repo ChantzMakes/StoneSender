@@ -1,4 +1,4 @@
-# CNC Sender — User Guide
+# StoneSender — User Guide
 
 This guide is for people who want to *use* the app with their machine. No programming needed.
 
@@ -15,8 +15,24 @@ This guide is for people who want to *use* the app with their machine. No progra
 
 ## 1. Installing
 
-Installers for Windows, macOS and Linux will be provided in a later update. Until then, someone with a
-development setup has to build it (see the README).
+Download the installer for your computer from the
+[StoneSender releases page](https://github.com/ChantzMakes/StoneSender/releases) (the newest release is at the
+top, under *Assets*):
+
+- **Windows:** `StoneSender_…_x64-setup.exe`. Double-click it; it installs for your user account (no
+  administrator needed) and adds a Start-menu entry. If Windows shows *"Windows protected your PC"*, click
+  **More info → Run anyway** (this appears for programs that aren't yet widely downloaded).
+- **macOS:** `StoneSender_…_universal.dmg` (works on Intel and Apple-silicon Macs). Open it and drag
+  StoneSender into *Applications*. If macOS says it can't check the app, right-click StoneSender in
+  Applications and choose **Open**, or allow it under *System Settings → Privacy & Security*.
+- **Linux:** the `.AppImage` works on most distributions (make it executable, then run it). `.deb` (Ubuntu,
+  Debian, Mint) and `.rpm` (Fedora) install like any package. To use a USB controller you may need to add
+  yourself to the `dialout` group: `sudo usermod -a -G dialout $USER`, then log out and in again.
+
+**Updates:** StoneSender looks for a new version when it starts and shows a blue bar when there is one.
+Click **Install and restart** — it is only possible while disconnected from your machine, because the app
+restarts. You can turn the check off, or check by hand, in **Preferences → About & updates**. Updates are
+signed, so the app only installs versions published by the StoneSender project.
 
 ## 2. The setup wizard
 
@@ -255,6 +271,9 @@ On a Mac, use **Cmd** instead of **Ctrl**.
 
 Profiles and settings are stored on your computer:
 
-- Windows: `%APPDATA%\dev.cncsender.app`
-- macOS: `~/Library/Application Support/dev.cncsender.app`
-- Linux: `~/.local/share/dev.cncsender.app`
+- Windows: `%APPDATA%\com.chantzmakes.stonesender`
+- macOS: `~/Library/Application Support/com.chantzmakes.stonesender`
+- Linux: `~/.local/share/com.chantzmakes.stonesender`
+
+Profiles and settings from the earlier test builds (folder `dev.cncsender.app`) are copied over
+automatically the first time StoneSender starts. Uninstalling the app leaves this folder in place.

@@ -1,7 +1,7 @@
 /** Which global dialogs are open (so banners, toolbar and shortcuts can open them). */
 import { create } from 'zustand';
 
-export type PrefsTab = 'appearance' | 'layout' | 'shortcuts' | 'gamepad' | 'advanced';
+export type PrefsTab = 'appearance' | 'layout' | 'shortcuts' | 'gamepad' | 'advanced' | 'about';
 
 interface UiStore {
   settingsOpen: boolean;

@@ -96,3 +96,12 @@ test('help: F1, search, context sections, shortcuts and codes', async ({ page })
   await page.getByTestId('help-macros').click();
   await expect(page.getByRole('heading', { name: 'Macros' })).toBeInViewport();
 });
+
+test('about: version, and updates only in the installed app', async ({ page }) => {
+  await page.getByTestId('open-prefs').click();
+  await page.getByTestId('prefs-tab-about').click();
+  await expect(page.getByTestId('app-version')).toHaveText(/^\d+\.\d+\.\d+/);
+  await page.getByTestId('update-check').click();
+  await expect(page.getByTestId('prefs-about')).toContainText('installed app');
+  await expect(page.getByTestId('update-banner')).toHaveCount(0);
+});

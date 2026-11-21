@@ -1,6 +1,8 @@
 # AGENTS.md — working notes for future sessions
 
-G-code sender, visualizer and machine simulator for GRBL (Tauri 2 + React/TS + Rust).
+**StoneSender** — G-code sender, visualizer and machine simulator for GRBL (Tauri 2 + React/TS + Rust).
+Identifier `com.chantzmakes.stonesender`; repo https://github.com/ChantzMakes/StoneSender (the local folder
+is still `cnc-sender`).
 The spec is delivered in phases; **stop after each phase for the owner's confirmation.**
 
 | Phase | Scope | Status |
@@ -13,8 +15,8 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | **done** |
 | 7a | Start-from-line, guided tool changes, probing wizards, height-map auto-leveling | **done** |
 | 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | **done** |
-| 8a | Themes, layouts, shortcuts, in-app help, preferences, 5M-line performance pass | **done** (awaiting review) |
-| 8b | Installers (Windows/macOS/Linux), signing, auto-update, CI on GitHub Actions + Releases | next |
+| 8a | Themes, layouts, shortcuts, in-app help, preferences, 5M-line performance pass | **done** |
+| 8b | Rename to StoneSender, installers (Windows/macOS/Linux), signing, auto-update, CI on GitHub Actions + Releases | **done** (awaiting review) |
 
 ## Commands
 
@@ -31,7 +33,7 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | E2E tests | `npm run test:e2e` (Playwright, browser backend; first time: `npx playwright install chromium`) |
 | Rust tests | `cargo test --workspace` |
 | Rust lint | `cargo clippy --workspace --all-targets -- -D warnings` |
-| Production build | `npm run tauri build` |
+| Production build | `npm run tauri build` (installers in `target/release/bundle`; release/signing: `docs/RELEASING.md`) |
 | Regenerate icons | `npm run icons` (from `app-icon.svg`) |
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
@@ -40,8 +42,8 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Perf: browser main thread | `$env:PERF_E2E=1; npx playwright test perf --workers 1` (`PERF_PROFILE=<file>` saves a CPU profile) |
 | Perf: desktop app | start with `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9333'; npx tauri dev --release`, then `node scripts/perf/desktop-load.mjs` |
 
-All of the above pass as of the end of Phase 8a (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
-tests against the emulator, plus 1 ignored perf test; Vitest: 166 incl. planner-vs-emulator timing, removal/export,
+All of the above pass as of the end of Phase 8b (Rust: 86 tests incl. 19 link/streaming and 5 Phase 7 integration
+tests against the emulator, plus 1 ignored perf test; Vitest: 168 incl. the update install gate, planner-vs-emulator timing, removal/export,
 recovery, probing, leveling, transforms, generators, macros, gamepad mapping, shortcuts, help markdown (every
 in-app help link must hit a guide section); Playwright: 36 + 1 opt-in perf spec, run with 4 workers because headless
 Chromium renders WebGL in software — `freshApp` sets a 1 mm simulation grid and long flows use `test.slow()`;
@@ -224,6 +226,14 @@ docs/USER_GUIDE.md
     Every layout preset keeps the Job panel.
 32. Developer tools (virtual-machine fault injection) moved from a header toggle to Preferences → Advanced;
     the header shows a bug icon only while they are on.
+33. **Updates never install while connected** (`store/updates.ts` `canInstallNow`): installing quits and
+    restarts the app, which would drop the link mid-job. The startup check (on by default, switchable in
+    Preferences → About & updates, skipped in dev builds) only reads `latest.json` from GitHub Releases;
+    nothing downloads until the user clicks Install. Updates must carry a signature from the project's
+    updater key (minisign, verified by tauri-plugin-updater) — tested: a tampered download is refused.
+34. Releases are **drafts** until the owner publishes them; the updater reads only the latest published
+    release, so publishing is the go-live switch. The release workflow refuses a tag that doesn't match
+    package.json and refuses to run without the updater key.
 
 ## G-code engine conventions (Phase 3)
 
@@ -321,6 +331,30 @@ docs/USER_GUIDE.md
 - drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
 - With the machine model hidden, moving-table machines no longer slide the job in Y.
 
+## Phase 8b conventions
+
+- Name/version: `productName`/`mainBinaryName` StoneSender, crate `stonesender` (lib `stonesender_lib`).
+  **package.json is the version source**: `tauri.conf.json` has `"version": "../package.json"` and Vite
+  defines `__APP_VERSION__` (`src/globals.d.ts`). Keep `[workspace.package] version` in step by hand.
+  File-format ids (`cnc-sender-profile`, `cnc-sender-macros`, `cnc-sender-grbl-settings`) and the browser
+  preview's localStorage keys keep their old names on purpose (shared files stay importable).
+- Data folder: on first start `Storage::migrate_from` copies `profiles/*.json` and `app-settings.json` from
+  the sibling `dev.cncsender.app` folder if the new one is empty (never deletes, never overwrites).
+- Updater: `tauri-plugin-updater` + `tauri-plugin-process` (capabilities `updater:default`,
+  `process:allow-restart`); endpoint `…/releases/latest/download/latest.json`; Windows `installMode`
+  passive; `plugins.updater.pubkey` must be set to the real key before the first release (placeholder
+  `UPDATER-PUBLIC-KEY-NOT-SET` until then — the app starts fine, update checks fail). Updater artifacts are
+  only built with `--config src-tauri/tauri.release.conf.json` (CI), so plain local builds need no key.
+- Bundles: NSIS (per-user, no admin) + MSI on Windows, universal `.dmg` + `.app.tar.gz` on macOS (ad-hoc
+  signed `-` unless Developer ID secrets exist), AppImage/deb/rpm on Linux (deb depends on libudev1).
+- CI: `.github/workflows/ci.yml` (Ubuntu: typecheck, Vitest, clippy, cargo test, Playwright) and
+  `release.yml` (tag `v*` → three-platform `tauri-action` build → draft release + `latest.json`; Windows
+  Authenticode and Apple signing/notarization only when their secrets exist).
+- Verified locally: signed 0.1.1 NSIS/MSI built with a throwaway key; the 0.1.0 app (release build, CDP)
+  found it through a local feed, showed the notes in the banner and Preferences, disabled Install while
+  connected, downloaded and verified the genuine installer and refused a tampered one. Not installed.
+- Help renders web links as copyable text (the desktop window has no browser to open them in).
+
 ## Phase 8a conventions
 
 - **Preferences** (`features/settings/PreferencesDialog.tsx`, `store/ui.ts` `prefs`): Appearance (theme
@@ -412,10 +446,19 @@ spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, ser
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
 
-## Known gaps after Phase 8a
+## Known gaps after Phase 8b
 
-- App name/identifier are still the placeholders (`CNC Sender`, `dev.cncsender.app`); the owner will give the
-  final ones before 8b (they are baked into installers and the updater).
+- **Before the first release the owner must** create the updater key, put its public key in
+  `tauri.conf.json` and add the secrets (`docs/RELEASING.md`). Without Windows / Apple certificates the
+  installers are unsigned (SmartScreen / Gatekeeper warnings, explained in the user guide).
+- The macOS and Linux builds and both workflows have not run yet (no push to GitHub so far); only the
+  Windows bundles were built here. The YAML is syntax-checked, not executed.
+- A full install-and-restart through the updater was not exercised (download + signature only), to avoid
+  installing over the developer's machine. MSI installs don't auto-update (the feed prefers NSIS).
+- Linux `.deb`/`.rpm` installs don't self-update (AppImage does); serial access may need the `dialout` group.
+- No crash reporting / telemetry (by design so far); no in-app link opener for web pages.
+
+## Known gaps after Phase 8a
 - Remaining big-file costs: the text is still held in Rust, the UI store and the worker (≈3 × file size);
   the 3D view keeps CPU copies of its vertex buffers (needed to rebuild after the view remounts); the WebGL
   upload of ~5M vertices and the result hand-off are the 0.7–1.2 s main-thread pauses that remain. The

@@ -14,6 +14,10 @@ import { LAYOUT_PRESETS, PANEL_LABELS, type PanelVisibility, THEMES, type ThemeC
 import { cn } from '@/lib/utils';
 import { type AppSettings, useApp } from '@/store/app';
 import { type PrefsTab, useUi } from '@/store/ui';
+import { APP_VERSION, canInstallNow, RELEASES_URL, useUpdates } from '@/store/updates';
+import { useLink } from '@/store/link';
+import { Markdown } from '@/features/help/Markdown';
+import { parseMarkdown } from '@/lib/markdown';
 
 function Row({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -49,6 +53,9 @@ export function PreferencesDialog() {
               Gamepad
             </TabsTrigger>
             <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            <TabsTrigger value="about" data-testid="prefs-tab-about">
+              About &amp; updates
+            </TabsTrigger>
           </TabsList>
           <div className="mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
             <TabsContent value="appearance">
@@ -65,6 +72,9 @@ export function PreferencesDialog() {
             </TabsContent>
             <TabsContent value="advanced">
               <Advanced />
+            </TabsContent>
+            <TabsContent value="about">
+              <About />
             </TabsContent>
           </div>
         </Tabs>
@@ -306,6 +316,64 @@ function Advanced() {
           <Switch checked={s.devTools} onCheckedChange={(v) => update((x) => ({ ...x, devTools: v }))} aria-label="Developer tools" />
         </Row>
       )}
+    </div>
+  );
+}
+
+function About() {
+  const checkOnStartup = useApp((st) => st.settings.updates.checkOnStartup);
+  const update = useApp((st) => st.update);
+  const u = useUpdates();
+  const connected = useLink((st) => st.state !== 'disconnected');
+  const gate = canInstallNow();
+  return (
+    <div data-testid="prefs-about">
+      <Row label="StoneSender" hint="G-code sender, visualizer and simulator for GRBL machines.">
+        <span className="font-mono text-sm" data-testid="app-version">
+          {APP_VERSION}
+        </span>
+      </Row>
+      <Row label="Look for updates when the app starts" hint="Asks github.com whether there is a newer version. Nothing is downloaded until you click Install.">
+        <Switch checked={checkOnStartup} onCheckedChange={(v) => update((x) => ({ ...x, updates: { ...x.updates, checkOnStartup: v } }))} aria-label="Look for updates when the app starts" />
+      </Row>
+      <Row
+        label="Updates"
+        hint={
+          u.status === 'checking'
+            ? 'Checking…'
+            : u.status === 'none'
+              ? 'You have the newest version.'
+              : u.status === 'available'
+                ? `Version ${u.version} is available.`
+                : u.status === 'downloading'
+                  ? `Downloading… ${u.progress != null ? Math.round(u.progress * 100) + ' %' : ''}`
+                  : u.status === 'installing'
+                    ? 'Installing — the app restarts in a moment.'
+                    : 'Updates are signed: the app only installs versions published by the StoneSender project.'
+        }
+      >
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={u.status === 'checking' || u.status === 'downloading'} onClick={() => void u.check()} data-testid="update-check">
+            Check now
+          </Button>
+          {u.status === 'available' && (
+            <Button size="sm" disabled={!gate.ok} onClick={() => void u.install()} title={gate.reason}>
+              Install and restart
+            </Button>
+          )}
+        </div>
+      </Row>
+      {u.error && <p className="py-2 text-sm text-destructive">{u.error}</p>}
+      {u.status === 'available' && connected && <p className="py-2 text-sm text-muted-foreground">Disconnect from the machine to install — installing restarts StoneSender.</p>}
+      {u.status === 'available' && u.notes && (
+        <div className="selectable mt-2 max-h-64 overflow-y-auto rounded-md border p-3 text-sm">
+          <div className="mb-1 font-medium">What's new in {u.version}</div>
+          <Markdown blocks={parseMarkdown(u.notes)} />
+        </div>
+      )}
+      <p className="pt-3 text-xs text-muted-foreground">
+        All versions and their notes: <span className="selectable font-mono">{RELEASES_URL}</span>
+      </p>
     </div>
   );
 }

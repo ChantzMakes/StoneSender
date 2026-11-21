@@ -22,12 +22,12 @@ export interface ProfileExportFile {
   profile: MachineProfile;
 }
 
-export function exportProfile(p: MachineProfile, appVersion = '0.1.0'): string {
+export function exportProfile(p: MachineProfile, appVersion: string = __APP_VERSION__): string {
   const file: ProfileExportFile = {
     format: EXPORT_FORMAT,
     formatVersion: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    app: `CNC Sender ${appVersion}`,
+    app: `StoneSender ${appVersion}`,
     profile: p,
   };
   return JSON.stringify(file, null, 2);

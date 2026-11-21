@@ -1,0 +1,136 @@
+# Installers for Windows, macOS and Linux + the auto-update feed.
+#
+# Push a tag `vX.Y.Z` that matches package.json (see docs/RELEASING.md). This
+# builds every platform and uploads them to a DRAFT GitHub release together
+# with `latest.json`. Nothing reaches users until you publish the draft: the
+# app's updater only reads the latest *published* release.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   required  TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD if the key has one) — signs updates
+#   optional  WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD — Authenticode
+#   optional  APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#             APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID — Developer ID + notarization
+# Without the optional ones the installers are built unsigned (Windows SmartScreen and
+# macOS Gatekeeper will warn; macOS builds are ad-hoc signed so they can still be opened).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches package.json, updater key is configured
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}"; exit 1
+          fi
+          if grep -q "UPDATER-PUBLIC-KEY-NOT-SET" src-tauri/tauri.conf.json; then
+            echo "::error::Set the updater public key in src-tauri/tauri.conf.json (docs/RELEASING.md)"; exit 1
+          fi
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY repository secret (docs/RELEASING.md)"; exit 1
+          fi
+
+  build:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - name: Windows code signing (only if the certificate secret is set)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) { Write-Host "No Windows certificate: building unsigned."; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $pw = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+          Remove-Item $pfx
+          $conf = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Depth 5
+          Set-Content -Path src-tauri/tauri.windows-sign.conf.json -Value $conf -Encoding utf8
+          "SIGN_ARGS=--config src-tauri/tauri.windows-sign.conf.json" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: macOS signing and notarization (only if the secrets are set)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Empty variables would make the bundler try to sign with no identity: pass only the ones set.
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!v}" ]; then
+              d="EOF_$RANDOM$RANDOM"
+              { echo "$v<<$d"; echo "${!v}"; echo "$d"; } >> "$GITHUB_ENV"
+            fi
+          done
+          [ -n "$APPLE_SIGNING_IDENTITY" ] || echo "No Apple identity: ad-hoc signed, not notarized."
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: 'StoneSender __VERSION__'
+          releaseBody: |
+            Download the installer for your computer below:
+            - **Windows:** `StoneSender_…_x64-setup.exe`
+            - **macOS (Intel and Apple silicon):** `StoneSender_…_universal.dmg`
+            - **Linux:** `.AppImage` (any distribution, updates itself), `.deb` (Ubuntu / Debian) or `.rpm` (Fedora)
+
+            Already installed? StoneSender offers the update itself (Preferences → About & updates).
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.release.conf.json ${{ matrix.args }} ${{ env.SIGN_ARGS }}

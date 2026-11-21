@@ -13,6 +13,7 @@ import { GrblSettingsDialog } from '@/features/settings/GrblSettingsDialog';
 import { PreferencesDialog } from '@/features/settings/PreferencesDialog';
 import { HelpDialog } from '@/features/help/HelpDialog';
 import { useShortcuts } from '@/features/layout/useShortcuts';
+import { UpdateBanner, useStartupUpdateCheck } from '@/features/layout/UpdateBanner';
 import { WcsDialog } from '@/features/wcs/WcsDialog';
 import { useUi } from '@/store/ui';
 import { useJobDrop } from '@/features/job/useJobDrop';
@@ -58,6 +59,7 @@ export default function App() {
   const centerTab = useApp((s) => s.settings.centerTab);
   useAnalysisSync();
   useShortcuts();
+  useStartupUpdateCheck();
   const dropping = useJobDrop();
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function App() {
         <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-3 py-1.5">
           <div className="flex items-center gap-2 pr-2">
             <img src="/app-icon.svg" alt="" className="size-7" />
-            <span className="hidden font-semibold lg:inline">CNC Sender</span>
+            <span className="hidden font-semibold lg:inline">StoneSender</span>
           </div>
           <ProfileSwitcher onManage={() => setManagerOpen(true)} onNew={() => setWizardOpen(true)} />
           <div className="mx-1 h-6 w-px bg-border" />
@@ -117,6 +119,7 @@ export default function App() {
             </div>
           </div>
         </header>
+        <UpdateBanner />
         <Banners />
         <main className="min-h-0 flex-1">
           {profile ? (

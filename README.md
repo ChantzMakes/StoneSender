@@ -1,9 +1,12 @@
-# CNC Sender
+# StoneSender
 
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 8a of 8.** Adds Preferences (dark / light / high-contrast / system theme, UI size, layout
+> **Status: Phase 8b of 8.** Renamed to StoneSender; installers for Windows (NSIS/MSI), macOS (universal
+> dmg) and Linux (AppImage/deb/rpm) built by GitHub Actions on version tags, signed auto-updates from
+> GitHub Releases (never installed while connected to a machine), CI on every push. See `docs/RELEASING.md`.
+> Phase 8a added Preferences (dark / light / high-contrast / system theme, UI size, layout
 > presets and panel switches, rebindable keyboard shortcuts with Esc fixed as STOP and opt-in keyboard
 > jogging, gamepad settings), in-app help (F1: the user guide with search, context "?" buttons, shortcut
 > list, error/alarm codes) and a performance pass for 5M-line files. Installers and auto-update are 8b.
@@ -32,7 +35,11 @@ machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 **Safety:** the on-screen STOP is a software feed-hold + reset. It is **not** an emergency stop. Always keep a
 hardware E-stop within reach.
 
-For end users: see the [User Guide](docs/USER_GUIDE.md).
+**Download:** installers for Windows, macOS and Linux are on the
+[releases page](https://github.com/ChantzMakes/StoneSender/releases). Installed copies update themselves.
+
+For end users: see the [User Guide](docs/USER_GUIDE.md) (also built into the app — press F1).
+For maintainers: [Releasing](docs/RELEASING.md).
 
 ## Setup (developers)
 
@@ -82,7 +89,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 npm run tauri build
 ```
 
-Signed installers and auto-update are Phase 8.
+Installers land in `target/release/bundle`. Signed release builds and auto-update: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Architecture
 

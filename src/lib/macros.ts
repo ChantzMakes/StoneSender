@@ -115,7 +115,7 @@ export function parseMacroFile(text: string): { macros: Macro[] } | { error: str
     return { error: 'This is not a macro file (not valid JSON).' };
   }
   const r = MacroFileSchema.safeParse(raw);
-  if (!r.success) return { error: `This is not a CNC Sender macro file: ${r.error.issues[0]?.message ?? 'unknown format'}.` };
+  if (!r.success) return { error: `This is not a StoneSender macro file: ${r.error.issues[0]?.message ?? 'unknown format'}.` };
   return { macros: r.data.macros.map((m) => ({ ...m, id: macroId() })) };
 }
 

@@ -28,15 +28,21 @@ function Inlines({ c }: { c: Inline[] }) {
               </code>
             );
           case 'link': {
-            // Only in-guide anchors and web links; anything else renders as text.
-            const safe = /^(#|https?:\/\/)/.test(x.href);
-            return safe ? (
-              <a key={i} href={x.href} target={x.href.startsWith('#') ? undefined : '_blank'} rel="noreferrer" className="text-primary underline">
-                <Inlines c={x.c} />
-              </a>
-            ) : (
-              <Inlines key={i} c={x.c} />
-            );
+            // In-guide anchors are links. Web addresses are shown as copyable text: the desktop
+            // window has no browser to open them in. Anything else renders as plain text.
+            if (x.href.startsWith('#'))
+              return (
+                <a key={i} href={x.href} className="text-primary underline">
+                  <Inlines c={x.c} />
+                </a>
+              );
+            if (/^https?:\/\//.test(x.href))
+              return (
+                <span key={i}>
+                  <Inlines c={x.c} /> (<span className="selectable font-mono text-[0.85em] break-all">{x.href}</span>)
+                </span>
+              );
+            return <Inlines key={i} c={x.c} />;
           }
         }
       })}

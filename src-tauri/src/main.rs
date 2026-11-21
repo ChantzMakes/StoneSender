@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    cnc_sender_lib::run()
+    stonesender_lib::run()
 }

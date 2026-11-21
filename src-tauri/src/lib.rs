@@ -36,9 +36,19 @@ pub struct AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            let storage = storage::Storage::new(data_dir)?;
+            let storage = storage::Storage::new(data_dir.clone())?;
+            // Test builds used the identifier dev.cncsender.app: bring their profiles along once.
+            if let Some(parent) = data_dir.parent() {
+                match storage.migrate_from(&parent.join("dev.cncsender.app")) {
+                    Ok(0) => {}
+                    Ok(n) => log::info!("copied {n} files from the old app folder"),
+                    Err(e) => log::warn!("could not copy the old app folder: {e}"),
+                }
+            }
             let sink = Arc::new(TauriSink { app: app.handle().clone() });
             app.manage(AppState { link: Link::new(sink), virtual_factory: Mutex::new(None), storage, job_source: Mutex::new(None) });
             Ok(())

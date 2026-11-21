@@ -345,35 +345,53 @@ function pickFile(accept: string): Promise<File | null> {
 }
 
 /** Minimal scan so the job panel can show something in the preview. */
+/**
+ * Rough stand-in for the Rust scan (the desktop app runs the real one). One
+ * pass over the lines; features are matched on the whole text (comments
+ * included), which is good enough for the preview and fast on huge files.
+ */
 function quickScan(text: string): JobScan {
-  const lines = text.split(/\r?\n/);
-  const sendable = lines.filter(
-    (l) => l.replace(/\(.*?\)|;.*$/g, "").trim() !== "",
-  );
-  const has = (re: RegExp) => sendable.some((l) => re.test(l.toUpperCase()));
+  let sourceLines = 0;
+  let sendable = 0;
+  let bytes = 0;
+  let pos = 0;
+  while (pos < text.length) {
+    let nl = text.indexOf("\n", pos);
+    if (nl < 0) nl = text.length;
+    sourceLines++;
+    let l = text.slice(pos, nl);
+    if (l.includes("(") || l.includes(";")) l = l.replace(/\(.*?\)|;.*$/g, "");
+    const t = l.trim();
+    if (t !== "") {
+      sendable++;
+      bytes += l.length + 1;
+    }
+    pos = nl + 1;
+  }
+  const has = (re: RegExp) => re.test(text);
   return {
-    sourceLines: lines.length,
-    lines: sendable.length,
-    bytes: sendable.reduce((n, l) => n + l.length + 1, 0),
+    sourceLines,
+    lines: sendable,
+    bytes,
     issues: [],
     issuesTruncated: 0,
     features: {
-      unitsMm: has(/G21/),
-      unitsInch: has(/G20/),
-      spindleCw: has(/M0?3(?!\d)/),
-      spindleCcw: has(/M0?4(?!\d)/),
+      unitsMm: has(/G21/i),
+      unitsInch: has(/G20/i),
+      spindleCw: has(/M0?3(?!\d)/i),
+      spindleCcw: has(/M0?4(?!\d)/i),
       maxS: 0,
       sChangesOnMoves: 0,
       toolChanges: [],
       tools: [],
-      arcs: has(/G0?[23](?!\d)/),
-      probe: has(/G38/),
-      coolantMist: has(/M0?7(?!\d)/),
-      coolantFlood: has(/M0?8(?!\d)/),
+      arcs: has(/G0?[23](?!\d)/i),
+      probe: has(/G38/i),
+      coolantMist: has(/M0?7(?!\d)/i),
+      coolantFlood: has(/M0?8(?!\d)/i),
       zWords: 0,
       aWords: 0,
       wcsUsed: [],
-      programEnd: has(/M(2|30)(?!\d)/),
+      programEnd: has(/M(2|30)(?!\d)/i),
       systemCommands: 0,
       dwellAfterSpindle: false,
     },

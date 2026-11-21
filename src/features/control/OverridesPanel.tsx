@@ -1,4 +1,5 @@
 /** Live feed / rapid / spindle-or-laser overrides (real-time bytes 0x90–0x9D). */
+import { HelpButton } from '@/features/help/HelpButton';
 import { RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -61,7 +62,7 @@ export function OverridesPanel({ profile }: { profile: MachineProfile }) {
 
   return (
     <div className="flex flex-col">
-      <PanelTitle>Overrides</PanelTitle>
+      <PanelTitle actions={<HelpButton section="overrides" label="Help: overrides" />}>Overrides</PanelTitle>
       <div className="flex flex-col gap-3 p-3">
         {legacy && <p className="text-xs text-warning">GRBL 0.9 has no live overrides.</p>}
         <Slider label="Feed" value={ov.feed} testId="ovr-feed" disabled={disabled} onCommit={(v) => void send(overrideBytes('feed', ov.feed, v))} />

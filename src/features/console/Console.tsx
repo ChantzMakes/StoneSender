@@ -1,4 +1,5 @@
 /** Serial console with filters, command history (↑/↓) and autocomplete. */
+import { HelpButton } from '@/features/help/HelpButton';
 import { ArrowDownToLine, Eraser, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -95,6 +96,7 @@ export function Console() {
       <PanelTitle
         actions={
           <>
+            <HelpButton section="the-console" label="Help: the console" />
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
               Status <Switch checked={!filters.hideStatus} onCheckedChange={(c) => setFilter('hideStatus', !c)} aria-label="Show status reports" />
             </label>

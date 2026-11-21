@@ -4,7 +4,7 @@ import App from './App';
 import './index.css';
 import { applyTheme } from './store/app';
 
-applyTheme('dark');
+applyTheme({ theme: 'dark', uiScale: 1 });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

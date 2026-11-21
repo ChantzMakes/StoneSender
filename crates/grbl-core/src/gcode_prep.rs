@@ -36,6 +36,88 @@ pub struct PreparedLine {
     pub tool_change: Option<ToolChange>,
 }
 
+/// Borrowed view of one prepared line.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineRef<'a> {
+    pub source_line: u32,
+    pub text: &'a str,
+    pub tool_change: Option<&'a ToolChange>,
+}
+
+impl LineRef<'_> {
+    pub fn to_owned_line(&self) -> PreparedLine {
+        PreparedLine { source_line: self.source_line, text: self.text.to_string(), tool_change: self.tool_change.cloned() }
+    }
+}
+
+/// Compact storage for millions of prepared lines (Phase 8 performance pass):
+/// one text buffer + end offsets instead of a heap string per line
+/// (5M lines: ~370 MB as `Vec<PreparedLine>`, ~150 MB here).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PreparedLines {
+    text: String,
+    /// End offset in `text` of each line
+    ends: Vec<u32>,
+    source: Vec<u32>,
+    /// (line index, tool change), sorted by index
+    tool_changes: Vec<(u32, ToolChange)>,
+}
+
+impl PreparedLines {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn len(&self) -> usize {
+        self.ends.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.ends.is_empty()
+    }
+    pub fn push(&mut self, source_line: u32, text: &str, tool_change: Option<ToolChange>) {
+        self.text.push_str(text);
+        assert!(self.text.len() <= u32::MAX as usize, "job text larger than 4 GB");
+        if let Some(tc) = tool_change {
+            self.tool_changes.push((self.ends.len() as u32, tc));
+        }
+        self.ends.push(self.text.len() as u32);
+        self.source.push(source_line);
+    }
+    pub fn text(&self, i: usize) -> &str {
+        let start = if i == 0 { 0 } else { self.ends[i - 1] as usize };
+        &self.text[start..self.ends[i] as usize]
+    }
+    pub fn source_line(&self, i: usize) -> u32 {
+        self.source[i]
+    }
+    pub fn tool_change(&self, i: usize) -> Option<&ToolChange> {
+        self.tool_changes.binary_search_by_key(&(i as u32), |(k, _)| *k).ok().map(|k| &self.tool_changes[k].1)
+    }
+    pub fn get(&self, i: usize) -> Option<LineRef<'_>> {
+        (i < self.len()).then(|| LineRef { source_line: self.source[i], text: self.text(i), tool_change: self.tool_change(i) })
+    }
+    pub fn iter(&self) -> impl Iterator<Item = LineRef<'_>> + '_ {
+        (0..self.len()).map(|i| self.get(i).expect("index in range"))
+    }
+    /// The lines from source line `from` on (start from line).
+    pub fn from_source_line(&self, from: u32) -> PreparedLines {
+        let mut out = PreparedLines::new();
+        for l in self.iter().filter(|l| l.source_line >= from) {
+            out.push(l.source_line, l.text, l.tool_change.cloned());
+        }
+        out
+    }
+}
+
+impl From<Vec<PreparedLine>> for PreparedLines {
+    fn from(v: Vec<PreparedLine>) -> Self {
+        let mut out = PreparedLines::new();
+        for l in v {
+            out.push(l.source_line, &l.text, l.tool_change);
+        }
+        out
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolChange {
@@ -134,8 +216,8 @@ fn g_name(v: f64) -> String {
 }
 
 /// Prepare and scan a whole job.
-pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan) {
-    let mut lines = Vec::new();
+pub fn prepare(source: &str, caps: &FirmwareCaps) -> (PreparedLines, JobScan) {
+    let mut lines = PreparedLines::new();
     let mut scan = JobScan::default();
     let issue = |scan: &mut JobScan, line: u32, severity: Severity, code: &str, message: String| {
         if scan.issues.len() < MAX_LISTED_ISSUES {
@@ -174,7 +256,7 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
             }
             scan.lines += 1;
             scan.bytes += text.len() as u64 + 1;
-            lines.push(PreparedLine { source_line: n, text, tool_change: None });
+            lines.push(n, &text, None);
             continue;
         }
         let mut is_motion = false;
@@ -296,7 +378,7 @@ pub fn prepare(source: &str, caps: &FirmwareCaps) -> (Vec<PreparedLine>, JobScan
         }
         scan.lines += 1;
         scan.bytes += text.len() as u64 + 1;
-        lines.push(PreparedLine { source_line: n, text, tool_change });
+        lines.push(n, &text, tool_change);
     }
     (lines, scan)
 }
@@ -317,7 +399,7 @@ mod tests {
         let src = "(header)\nG21 G90\n\nG0 X1 Y2\nM3 S1000\nG4 P2\nG1 X5 F100\nM30\n";
         let (lines, scan) = prepare(src, &FirmwareCaps::GRBL11);
         assert_eq!(lines.len(), 6);
-        assert_eq!(lines[0], PreparedLine { source_line: 2, text: "G21G90".into(), tool_change: None });
+        assert_eq!(lines.get(0).unwrap().to_owned_line(), PreparedLine { source_line: 2, text: "G21G90".into(), tool_change: None });
         assert_eq!(scan.lines, 6);
         assert!(scan.features.units_mm && scan.features.spindle_cw && scan.features.program_end);
         assert!(scan.features.dwell_after_spindle);
@@ -331,9 +413,13 @@ mod tests {
 M06
 G0 Z5 M6 T3
 ", &FirmwareCaps::GRBL11);
-        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), vec!["T2", "", "G0Z5T3"]);
-        assert_eq!(lines[0].tool_change, Some(ToolChange { line: 1, tool: Some(2) }));
-        assert_eq!(lines[1].tool_change, Some(ToolChange { line: 2, tool: None }));
+        assert_eq!(lines.iter().map(|l| l.text).collect::<Vec<_>>(), vec!["T2", "", "G0Z5T3"]);
+        assert_eq!(lines.tool_change(0), Some(&ToolChange { line: 1, tool: Some(2) }));
+        assert_eq!(lines.tool_change(1), Some(&ToolChange { line: 2, tool: None }));
+        assert_eq!(lines.tool_change(2), Some(&ToolChange { line: 3, tool: Some(3) }));
+        assert_eq!(lines.tool_change(3), None);
+        assert_eq!(lines.from_source_line(2).iter().map(|l| l.text).collect::<Vec<_>>(), vec!["", "G0Z5T3"]);
+        assert_eq!(lines.from_source_line(2).tool_change(0), Some(&ToolChange { line: 2, tool: None }));
         assert_eq!(scan.features.tool_changes.len(), 3);
         assert!(!scan.has_errors());
     }

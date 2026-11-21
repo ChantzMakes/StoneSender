@@ -21,7 +21,9 @@
 //! (0x85) is emitted, which stops motion and flushes the planned chunks. This
 //! guarantees no stale jog line can execute after the cancel.
 
-use grbl_core::gcode_prep::{PreparedLine, ToolChange};
+use grbl_core::gcode_prep::{PreparedLines, ToolChange};
+#[cfg(test)]
+use grbl_core::gcode_prep::PreparedLine;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -118,7 +120,7 @@ pub struct JobProgress {
 #[derive(Debug)]
 pub struct Job {
     pub name: String,
-    lines: Vec<PreparedLine>,
+    lines: PreparedLines,
     next: usize,
     acked: usize,
     pub mode: JobMode,
@@ -144,7 +146,8 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new(name: String, lines: Vec<PreparedLine>, mode: JobMode, now: Instant) -> Self {
+    pub fn new(name: String, lines: impl Into<PreparedLines>, mode: JobMode, now: Instant) -> Self {
+        let lines = lines.into();
         let (prelude, postlude) = match mode {
             JobMode::Run => (VecDeque::new(), VecDeque::new()),
             JobMode::Check => (VecDeque::from(["$C".to_string()]), VecDeque::from(["$C".to_string()])),
@@ -379,30 +382,30 @@ impl Engine {
                 };
                 if next < total {
                     let job = self.job.as_mut()?;
-                    let line = &job.lines[next];
-                    if line.tool_change.is_some() && job.mode == JobMode::Run && job.tool_change_mode == ToolChangeMode::Pause && job.tool_change_cleared != Some(next) {
+                    let tool_change = job.lines.tool_change(next);
+                    if tool_change.is_some() && job.mode == JobMode::Run && job.tool_change_mode == ToolChangeMode::Pause && job.tool_change_cleared != Some(next) {
                         if acked < next {
                             return None; // let everything before the M6 be acknowledged first
                         }
-                        job.pending_tool_change = line.tool_change.clone();
+                        job.pending_tool_change = tool_change.cloned();
                         job.phase = JobPhase::ToolChange;
                         job.paused_at = Some(now);
                         return self.poll(now);
                     }
-                    if line.text.is_empty() {
+                    if job.lines.text(next).is_empty() {
                         // A line that only held M6: nothing to send.
                         job.next += 1;
                         job.acked += 1;
                         return self.poll(now);
                     }
                     let (len, sys) = {
-                        let t = &self.job.as_ref()?.lines[next].text;
+                        let t = self.job.as_ref()?.lines.text(next);
                         (t.len(), is_system(t))
                     };
                     if self.can_send(len, sys) {
                         let job = self.job.as_mut()?;
                         job.next += 1;
-                        let text = job.lines[next].text.clone();
+                        let text = job.lines.text(next).to_string();
                         return Some(self.take(text, Origin::Job(next)));
                     }
                     return None;
@@ -517,7 +520,7 @@ impl Engine {
                         source_line: job.last_source_line,
                         code,
                         text,
-                        line_text: job.lines.get(i).map(|l| l.text.clone()).unwrap_or_default(),
+                        line_text: job.lines.get(i).map(|l| l.text.to_string()).unwrap_or_default(),
                     };
                     job.error_count += 1;
                     if job.errors.len() < MAX_REPORTED_ERRORS {

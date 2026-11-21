@@ -1,4 +1,4 @@
-import { Bug, Moon, SlidersHorizontal, Sun } from 'lucide-react';
+import { Bug, CircleHelp, Settings2, SlidersHorizontal } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,9 @@ import { JobPanel } from '@/features/job/JobPanel';
 import { JogPanel } from '@/features/jog/JogPanel';
 import { MacroPanel } from '@/features/macros/MacroPanel';
 import { GrblSettingsDialog } from '@/features/settings/GrblSettingsDialog';
+import { PreferencesDialog } from '@/features/settings/PreferencesDialog';
+import { HelpDialog } from '@/features/help/HelpDialog';
+import { useShortcuts } from '@/features/layout/useShortcuts';
 import { WcsDialog } from '@/features/wcs/WcsDialog';
 import { useUi } from '@/store/ui';
 import { useJobDrop } from '@/features/job/useJobDrop';
@@ -39,8 +42,11 @@ function Handle({ direction }: { direction: 'horizontal' | 'vertical' }) {
 
 export default function App() {
   const appLoaded = useApp((s) => s.loaded);
-  const theme = useApp((s) => s.settings.theme);
   const devTools = useApp((s) => s.settings.devTools);
+  const layout = useApp((s) => s.settings.layout);
+  const layoutEpoch = useUi((s) => s.layoutEpoch);
+  const openHelp = useUi((s) => s.openHelp);
+  const openPrefs = useUi((s) => s.openPrefs);
   const updateApp = useApp((s) => s.update);
   const profilesLoaded = useProfiles((s) => s.loaded);
   const profileCount = useProfiles((s) => s.profiles.length);
@@ -51,6 +57,7 @@ export default function App() {
   const [managerOpen, setManagerOpen] = useState(false);
   const centerTab = useApp((s) => s.settings.centerTab);
   useAnalysisSync();
+  useShortcuts();
   const dropping = useJobDrop();
 
   useEffect(() => {
@@ -73,7 +80,8 @@ export default function App() {
   return (
     <TooltipProvider>
       <div className="flex h-full flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-3">
+        {/* Wraps instead of clipping on narrow windows / large UI sizes: STOP must always be visible. */}
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-3 py-1.5">
           <div className="flex items-center gap-2 pr-2">
             <img src="/app-icon.svg" alt="" className="size-7" />
             <span className="hidden font-semibold lg:inline">CNC Sender</span>
@@ -81,22 +89,27 @@ export default function App() {
           <ProfileSwitcher onManage={() => setManagerOpen(true)} onNew={() => setWizardOpen(true)} />
           <div className="mx-1 h-6 w-px bg-border" />
           <ConnectionBar />
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tip content="Controller settings ($$): view, edit, compare with your profile, back up">
               <Button variant="ghost" size="sm" aria-label="Controller settings" data-testid="open-settings" disabled={!connected} onClick={() => openSettings('controller')}>
                 <SlidersHorizontal /> <span className="hidden xl:inline">Settings</span>
               </Button>
             </Tip>
-            {isTauri && (
-              <Tip content={devTools ? 'Developer tools on (fault injection for the virtual machine)' : 'Developer tools off'}>
-                <Button variant={devTools ? 'secondary' : 'ghost'} size="icon" aria-label="Toggle developer tools" onClick={() => updateApp((s) => ({ ...s, devTools: !s.devTools }))}>
+            {isTauri && devTools && (
+              <Tip content="Developer tools are on (fault injection for the virtual machine). Click to turn them off.">
+                <Button variant="secondary" size="icon" aria-label="Turn off developer tools" onClick={() => updateApp((s) => ({ ...s, devTools: false }))}>
                   <Bug />
                 </Button>
               </Tip>
             )}
-            <Tip content={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
-              <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={() => updateApp((s) => ({ ...s, theme: s.theme === 'dark' ? 'light' : 'dark' }))}>
-                {theme === 'dark' ? <Sun /> : <Moon />}
+            <Tip content="Preferences: theme, layout, shortcuts, gamepad (Ctrl+,)">
+              <Button variant="ghost" size="icon" aria-label="Preferences" data-testid="open-prefs" onClick={() => openPrefs()}>
+                <Settings2 />
+              </Button>
+            </Tip>
+            <Tip content="Help (F1)">
+              <Button variant="ghost" size="icon" aria-label="Help" data-testid="open-help" onClick={() => openHelp()}>
+                <CircleHelp />
               </Button>
             </Tip>
             <div className="ml-2">
@@ -107,57 +120,89 @@ export default function App() {
         <Banners />
         <main className="min-h-0 flex-1">
           {profile ? (
-            // autoSaveId persists panel sizes between sessions (localStorage).
-            <PanelGroup direction="horizontal" autoSaveId="main-layout-v2" className="h-full">
-              <Panel id="left" order={1} defaultSize={22} minSize={16} maxSize={40} className="!overflow-y-auto">
-                <Dro profile={profile} />
-                <div className="border-t" />
-                <MachineControls profile={profile} />
-                <div className="border-t" />
-                <OverridesPanel profile={profile} />
-              </Panel>
-              <Handle direction="horizontal" />
-              <Panel id="center" order={2} minSize={30}>
-                <PanelGroup direction="vertical" autoSaveId="center-layout">
-                  <Panel id="view" order={1} defaultSize={58} minSize={20} className="flex flex-col">
-                    <Tabs value={centerTab} onValueChange={(v) => updateApp((s) => ({ ...s, centerTab: v as 'view' | 'editor' }))} className="flex min-h-0 flex-1 flex-col">
-                      <div className="flex h-9 shrink-0 items-center border-b px-2">
-                        <TabsList className="h-7 p-0.5">
-                          <TabsTrigger value="view" className="py-0.5 text-xs">
-                            3D view
-                          </TabsTrigger>
-                          <TabsTrigger value="editor" className="py-0.5 text-xs" data-testid="editor-tab">
-                            G-code
-                          </TabsTrigger>
-                        </TabsList>
-                      </div>
-                      <div className="min-h-0 flex-1">
-                        {centerTab === 'view' ? (
-                          <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading 3D view…</div>}>
-                            <Viewer3D profile={profile} />
-                          </Suspense>
-                        ) : (
-                          <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading editor…</div>}>
-                            <GcodeEditor />
-                          </Suspense>
-                        )}
-                      </div>
-                    </Tabs>
+            // autoSaveId persists panel sizes between sessions (localStorage); the
+            // layout epoch remounts everything after "Reset sizes".
+            <PanelGroup key={layoutEpoch} direction="horizontal" autoSaveId={`main-layout-v3${layout.swapSides ? '-swapped' : ''}`} className="h-full">
+              {(() => {
+                const show = layout.show;
+                const status = (order: number) => (
+                  <Panel key="status" id="status" order={order} defaultSize={22} minSize={16} maxSize={40} className="!overflow-y-auto" data-testid="column-status">
+                    {/* The position readout is always shown (with STOP in the header). */}
+                    <Dro profile={profile} />
+                    {show.machine && (
+                      <>
+                        <div className="border-t" />
+                        <MachineControls profile={profile} />
+                      </>
+                    )}
+                    {show.overrides && (
+                      <>
+                        <div className="border-t" />
+                        <OverridesPanel profile={profile} />
+                      </>
+                    )}
                   </Panel>
-                  <Handle direction="vertical" />
-                  <Panel id="console" order={2} defaultSize={42} minSize={15}>
-                    <Console />
+                );
+                const hasWork = show.job || show.jog || show.macros;
+                const work = (order: number) =>
+                  hasWork ? (
+                    <Panel key="work" id="work" order={order} defaultSize={24} minSize={18} maxSize={40} className="!overflow-y-auto" data-testid="column-work">
+                      {[
+                        show.job && <JobPanel key="job" profile={profile} />,
+                        show.jog && <JogPanel key="jog" profile={profile} />,
+                        show.macros && <MacroPanel key="macros" profile={profile} />,
+                      ]
+                        .filter(Boolean)
+                        .map((el, i) => (
+                          <div key={i} className={i ? 'border-t' : undefined}>
+                            {el}
+                          </div>
+                        ))}
+                    </Panel>
+                  ) : null;
+                const center = (
+                  <Panel key="center" id="center" order={2} minSize={30}>
+                    <PanelGroup direction="vertical" autoSaveId={show.console ? 'center-layout' : 'center-layout-noconsole'}>
+                      <Panel id="view" order={1} defaultSize={58} minSize={20} className="flex flex-col">
+                        <Tabs value={centerTab} onValueChange={(v) => updateApp((s) => ({ ...s, centerTab: v as 'view' | 'editor' }))} className="flex min-h-0 flex-1 flex-col">
+                          <div className="flex h-9 shrink-0 items-center border-b px-2">
+                            <TabsList className="h-7 p-0.5">
+                              <TabsTrigger value="view" className="py-0.5 text-xs">
+                                3D view
+                              </TabsTrigger>
+                              <TabsTrigger value="editor" className="py-0.5 text-xs" data-testid="editor-tab">
+                                G-code
+                              </TabsTrigger>
+                            </TabsList>
+                          </div>
+                          <div className="min-h-0 flex-1">
+                            {centerTab === 'view' ? (
+                              <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading 3D view…</div>}>
+                                <Viewer3D profile={profile} />
+                              </Suspense>
+                            ) : (
+                              <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading editor…</div>}>
+                                <GcodeEditor />
+                              </Suspense>
+                            )}
+                          </div>
+                        </Tabs>
+                      </Panel>
+                      {show.console && (
+                        <>
+                          <Handle direction="vertical" />
+                          <Panel id="console" order={2} defaultSize={42} minSize={15}>
+                            <Console />
+                          </Panel>
+                        </>
+                      )}
+                    </PanelGroup>
                   </Panel>
-                </PanelGroup>
-              </Panel>
-              <Handle direction="horizontal" />
-              <Panel id="right" order={3} defaultSize={24} minSize={18} maxSize={40} className="!overflow-y-auto">
-                <JobPanel profile={profile} />
-                <div className="border-t" />
-                <JogPanel profile={profile} />
-                <div className="border-t" />
-                <MacroPanel profile={profile} />
-              </Panel>
+                );
+                const left = layout.swapSides ? work(1) : status(1);
+                const right = layout.swapSides ? status(3) : work(3);
+                return [left, left && <Handle key="h1" direction="horizontal" />, center, right && <Handle key="h2" direction="horizontal" />, right];
+              })()}
             </PanelGroup>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -175,6 +220,8 @@ export default function App() {
         firstRun={firstRun}
       />
       {profile && <WcsDialog profile={profile} />}
+      <PreferencesDialog />
+      <HelpDialog />
       {profile && <GrblSettingsDialog profile={profile} />}
       <ProfileManager
         open={managerOpen}

@@ -278,9 +278,26 @@ pub fn job_load(state: State<'_, AppState>, path: String) -> Result<LoadedJob, S
     Ok(LoadedJob { name, path, size_bytes: meta.len(), scan })
 }
 
-/// Same as `job_load` but for text that is already in the UI (browser drop, editor).
+/// The loaded job's text as raw bytes (an ArrayBuffer in the UI). Large files
+/// cross the IPC boundary much faster this way than as a JSON string.
 #[tauri::command(async)]
-pub fn job_load_text(state: State<'_, AppState>, name: String, text: String) -> Result<LoadedJob, String> {
+pub fn job_source_bytes(state: State<'_, AppState>) -> Result<tauri::ipc::Response, String> {
+    let src = state.job_source.lock().map_err(|e| e.to_string())?;
+    let (_, text) = src.as_ref().ok_or("no job loaded")?;
+    Ok(tauri::ipc::Response::new(text.as_bytes().to_vec()))
+}
+
+/// Same as `job_load` but for text that is already in the UI (browser drop,
+/// editor, generators). The text is the raw IPC body; the name is in the
+/// percent-encoded `name` header.
+#[tauri::command(async)]
+pub fn job_load_text(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Result<LoadedJob, String> {
+    let name = request.headers().get("name").and_then(|v| v.to_str().ok()).ok_or("missing name")?;
+    let name = percent_decode(name)?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw bytes".into());
+    };
+    let text = String::from_utf8_lossy(bytes).into_owned();
     let (_, scan) = prepare(&text, &current_caps(&state));
     let size = text.len() as u64;
     *state.job_source.lock().map_err(|e| e.to_string())? = Some((name.clone(), text));
@@ -301,8 +318,13 @@ pub struct JobStartOptions {
 #[tauri::command]
 pub fn job_start(state: State<'_, AppState>, mode: String, options: Option<JobStartOptions>) -> Result<(), String> {
     let options = options.unwrap_or_default();
-    let (name, text) = state.job_source.lock().map_err(|e| e.to_string())?.clone().ok_or("no job loaded")?;
-    let (lines, scan) = prepare(&text, &current_caps(&state));
+    let caps = current_caps(&state);
+    // Prepare under the lock instead of cloning a possibly huge text.
+    let (name, (lines, scan)) = {
+        let src = state.job_source.lock().map_err(|e| e.to_string())?;
+        let (name, text) = src.as_ref().ok_or("no job loaded")?;
+        (name.clone(), prepare(text, &caps))
+    };
     if scan.has_errors() {
         return Err("the job contains lines the controller would reject — see the pre-flight check".into());
     }
@@ -315,7 +337,7 @@ pub fn job_start(state: State<'_, AppState>, mode: String, options: Option<JobSt
             if mode == JobMode::Check {
                 return Err("start from a line only applies to a run".into());
             }
-            let rest: Vec<_> = lines.into_iter().filter(|l| l.source_line >= from).collect();
+            let rest = lines.from_source_line(from);
             if rest.is_empty() {
                 return Err(format!("nothing to send from line {from}"));
             }

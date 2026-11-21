@@ -1,4 +1,5 @@
 /** Job panel: open a file, pre-flight, run/check, pause/resume/stop, progress. */
+import { HelpButton } from '@/features/help/HelpButton';
 import { FileUp, Frame, History, ListStart, Pause, Play, Shapes, ShieldCheck, Square, Wand2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -88,6 +89,7 @@ export function JobPanel({ profile }: { profile: MachineProfile }) {
       <PanelTitle
         actions={
           <>
+            <HelpButton section="running-a-job" label="Help: running a job" />
             <Tip content="Job history">
               <Button variant="ghost" size="icon-sm" onClick={() => setHistoryOpen(true)} aria-label="Job history" data-testid="job-history-button">
                 <History />

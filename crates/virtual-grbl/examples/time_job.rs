@@ -45,11 +45,11 @@ fn main() {
     let mut pending = String::new();
     loop {
         while next < lines.len() {
-            let len = lines[next].text.len() + 1;
+            let len = lines.text(next).len() + 1;
             if in_flight.iter().sum::<usize>() + len > capacity {
                 break;
             }
-            dev.receive(format!("{}\n", lines[next].text).as_bytes());
+            dev.receive(format!("{}\n", lines.text(next)).as_bytes());
             in_flight.push_back(len);
             next += 1;
         }

@@ -8,3 +8,4 @@ playwright-report/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+samples/gcode/stress*.nc

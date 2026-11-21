@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/primitives';
 import { backend } from '@/lib/backend';
 import { errorMessage } from '@/lib/utils';
 import { useAnalysis } from '@/store/analysis';
-import { useApp } from '@/store/app';
+import { useResolvedTheme } from '@/store/app';
 import { sysMessage } from '@/store/console';
 import { isActivePhase, useLink } from '@/store/link';
 import { useSim } from '@/store/sim';
@@ -32,7 +32,7 @@ export default function GcodeEditor() {
   const openJob = useLink((s) => s.openJob);
   const loadJobText = useLink((s) => s.loadJobText);
   const analysis = useAnalysis((s) => s.result);
-  const theme = useApp((s) => s.settings.theme);
+  const theme = useResolvedTheme();
   const editorRef = useRef<Ed | null>(null);
   const decorations = useRef<string[]>([]);
   const [draft, setDraft] = useState<string | null>(null);
@@ -140,7 +140,7 @@ export default function GcodeEditor() {
       <div className="min-h-0 flex-1" data-testid="gcode-editor">
         <Editor
           language="gcode"
-          theme={theme === 'dark' ? 'gcode-dark' : 'gcode-light'}
+          theme={theme === 'light' ? 'gcode-light' : 'gcode-dark'}
           value={text}
           options={{
             readOnly: active,

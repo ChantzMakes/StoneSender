@@ -1,3 +1,4 @@
+import { HelpButton } from '@/features/help/HelpButton';
 import { Crosshair, Home, LocateFixed, ParkingSquare, RotateCcw, Unlock } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,7 @@ export function MachineControls({ profile }: { profile: MachineProfile }) {
 
   return (
     <div className="flex flex-col">
-      <PanelTitle>Machine</PanelTitle>
+      <PanelTitle actions={<HelpButton section="moving-the-machine-and-setting-zero" label="Help: homing and setting zero" />}>Machine</PanelTitle>
       <div className="flex flex-col gap-2 p-3">
         <div className="grid grid-cols-3 gap-1.5">
           <Tip content={homingEnabled ? 'Find the home switches ($H)' : 'Homing is disabled on this controller ($22=0)'}>

@@ -4,10 +4,33 @@ import { defaultMacros, MacroSchema } from '@/lib/macros';
 import { create } from 'zustand';
 import { backend } from '@/lib/backend';
 import { defaultTools, ToolSchema } from '@/lib/sim/tools';
+import { useEffect, useState } from 'react';
+import { applyTheme as applyThemeChoice, DEFAULT_LAYOUT, prefersDark, themeBase } from '@/lib/theme';
 
 const AppSettingsSchema = z.object({
   version: z.literal(1).default(1),
-  theme: z.enum(['dark', 'light']).default('dark'),
+  theme: z.enum(['system', 'dark', 'light', 'contrast']).default('dark'),
+  /** Whole-UI zoom (root font size) */
+  uiScale: z.number().min(0.75).max(2).default(1),
+  /** Panel layout (Phase 8) */
+  layout: z
+    .object({
+      preset: z.enum(['standard', 'running', 'setup', 'touch', 'custom']).default('standard'),
+      show: z
+        .object({
+          machine: z.boolean().default(true),
+          overrides: z.boolean().default(true),
+          job: z.boolean().default(true),
+          jog: z.boolean().default(true),
+          macros: z.boolean().default(true),
+          console: z.boolean().default(true),
+        })
+        .default({}),
+      swapSides: z.boolean().default(false),
+    })
+    .default(DEFAULT_LAYOUT),
+  /** Keyboard shortcut overrides: action id → key name, or null for none (lib/shortcuts.ts) */
+  shortcuts: z.record(z.string(), z.string().nullable()).default({}),
   activeProfileId: z.string().nullable().default(null),
   wizardCompleted: z.boolean().default(false),
   console: z
@@ -87,12 +110,14 @@ export const useApp = create<AppStore>((set, get) => ({
     }
     const parsed = AppSettingsSchema.safeParse(raw ?? {});
     set({ loaded: true, settings: parsed.success ? parsed.data : DEFAULT_SETTINGS });
-    applyTheme(get().settings.theme);
+    applyTheme(get().settings);
+    // "Same as the computer" follows OS changes while the app runs.
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(get().settings));
   },
   update(patch) {
     const next = patch(get().settings);
     set({ settings: next });
-    applyTheme(next.theme);
+    applyTheme(next);
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       backend.saveAppSettings(get().settings).catch((e) => console.warn('could not save app settings', e));
@@ -100,8 +125,20 @@ export const useApp = create<AppStore>((set, get) => ({
   },
 }));
 
-export function applyTheme(theme: 'dark' | 'light') {
-  if (typeof document === 'undefined') return;
-  document.documentElement.classList.toggle('dark', theme === 'dark');
-  document.documentElement.dataset.theme = theme;
+export function applyTheme(s: Pick<AppSettings, 'theme' | 'uiScale'>) {
+  applyThemeChoice(s.theme, s.uiScale);
+}
+
+/** Resolved theme for canvases that pick their own colours (3D view, editor). */
+export function useResolvedTheme(): 'dark' | 'light' | 'contrast' {
+  const choice = useApp((s) => s.settings.theme);
+  const [systemDark, setSystemDark] = useState(prefersDark);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+    const on = () => setSystemDark(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return choice === 'contrast' ? 'contrast' : themeBase(choice, systemDark);
 }

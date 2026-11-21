@@ -1,4 +1,5 @@
 /** Stock, tools and simulation resolution for the material-removal simulation and the pre-flight checks. */
+import { HelpButton } from '@/features/help/HelpButton';
 import { Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -70,7 +71,9 @@ export function StockDialog({ open, onOpenChange, profile }: { open: boolean; on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Stock &amp; tools</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Stock &amp; tools <HelpButton section="material-simulation" label="Help: material simulation" />
+          </DialogTitle>
           <DialogDescription>Used by the material-removal simulation and the pre-flight checks (cuts below the stock, rapids through it, gouges, holder clearance).</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-3 gap-3">

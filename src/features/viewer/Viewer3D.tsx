@@ -11,7 +11,7 @@ import { stockBox } from '@/lib/sim/setup';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
 import { useAnalysis } from '@/store/analysis';
-import { useApp } from '@/store/app';
+import { useResolvedTheme } from '@/store/app';
 import { isActivePhase, useLink } from '@/store/link';
 import { useRemovalSync } from '@/store/removal';
 import { type ColorMode, SPEEDS, useSim } from '@/store/sim';
@@ -22,9 +22,10 @@ import { RemovalPanel } from './RemovalPanel';
 import { StockDialog } from './StockDialog';
 import { useSimSetup, useSimWco } from './useSimSetup';
 
-const PALETTES: Record<'dark' | 'light', Palette> = {
+const PALETTES: Record<'dark' | 'light' | 'contrast', Palette> = {
   dark: { background: '#141920', grid: '#2a3340', section: '#3c4a5c', label: '#9aa7b6' },
   light: { background: '#f3f5f8', grid: '#d5dbe3', section: '#b3bcc8', label: '#4b5563' },
+  contrast: { background: '#000000', grid: '#5a5a5a', section: '#a0a0a0', label: '#ffffff' },
 };
 
 function webglAvailable(): boolean {
@@ -163,7 +164,7 @@ const seen: { profile?: string; analysis?: unknown } = {};
 export function Viewer3D({ profile }: { profile: MachineProfile }) {
   const analysis = useAnalysis((s) => s.result);
   const status = useAnalysis((s) => s.status);
-  const theme = useApp((s) => s.settings.theme);
+  const theme = useResolvedTheme();
   const connected = useLink((s) => s.state === 'connected');
   const sim = useSim();
   const [stockOpen, setStockOpen] = useState(false);

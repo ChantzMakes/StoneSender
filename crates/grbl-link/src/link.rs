@@ -23,7 +23,7 @@
 
 use crate::sender::{AckEvent, Engine, Job, JobMode, JobPhase, JobProgress, Origin, Outgoing, ToolChangeMode};
 use grbl_core::firmware::{parse_legacy_build, parse_welcome, BuildInfo, FirmwareInfo};
-use grbl_core::gcode_prep::PreparedLine;
+use grbl_core::gcode_prep::PreparedLines;
 use grbl_core::protocol::{parse_line, GrblLine};
 use grbl_core::realtime;
 use grbl_core::status::{MachineState, MachineStatus, StatusTracker};
@@ -466,11 +466,12 @@ impl Link {
 
     // ----- jobs ---------------------------------------------------------------
 
-    pub fn start_job(&self, name: String, lines: Vec<PreparedLine>, mode: JobMode) -> Result<(), LinkError> {
+    pub fn start_job(&self, name: String, lines: impl Into<PreparedLines>, mode: JobMode) -> Result<(), LinkError> {
         self.start_job_with(name, lines, mode, JobOptions::default())
     }
 
-    pub fn start_job_with(&self, name: String, lines: Vec<PreparedLine>, mode: JobMode, opts: JobOptions) -> Result<(), LinkError> {
+    pub fn start_job_with(&self, name: String, lines: impl Into<PreparedLines>, mode: JobMode, opts: JobOptions) -> Result<(), LinkError> {
+        let lines: PreparedLines = lines.into();
         let max_len = self.active.lock().expect("active lock").as_ref().map(|a| a.max_line_len).ok_or(LinkError::NotConnected)?;
         let prelude = opts.prelude.iter().map(|l| validate_line(l, max_len)).collect::<Result<Vec<_>, _>>()?;
         if prelude.iter().any(|l| l.starts_with('$') && !l.starts_with("$J=")) {

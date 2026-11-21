@@ -75,7 +75,7 @@ export function runChecks(input: CheckInput): CheckResult {
   const { tp, wco, bounds, stock, toolRadius, laser } = input;
   const res: CheckResult = { travel: [], belowStock: null, rapidsThroughStock: [], rapidsThroughStockCount: 0, problems: [] };
   const axes = ['X', 'Y', 'Z'] as const;
-  const worst = new Map<string, TravelOver>();
+  const worst: (TravelOver | undefined)[] = [];
   const addProblem = (p: Problem) => {
     if (res.problems.length < MAX_PROBLEMS) res.problems.push(p);
   };
@@ -83,24 +83,23 @@ export function runChecks(input: CheckInput): CheckResult {
     ? { min: [stock.min[0] - toolRadius, stock.min[1] - toolRadius, stock.min[2]], max: [stock.max[0] + toolRadius, stock.max[1] + toolRadius, stock.max[2] - TOL] }
     : null;
 
+  const over = (k: number, side: 'min' | 'max', amount: number, p: number[], line: number) => {
+    const key = k * 2 + (side === 'max' ? 1 : 0);
+    const cur = worst[key];
+    if (!cur) {
+      worst[key] = { axis: axes[k]!, side, amount, line };
+      addProblem({ kind: 'travel', line, point: [p[0]!, p[1]!, p[2]!] });
+    } else if (amount > cur.amount) cur.amount = amount;
+  };
+  // Hot path (every move and arc step of multi-million-line jobs): no allocations
+  // unless a problem is found.
   const checkPoint = (p: number[], line: number, cutting: boolean) => {
     for (let k = 0; k < 3; k++) {
       const m = p[k]! + wco[k]!;
       const lo = bounds.min[k]! - m;
       const hi = m - bounds.max[k]!;
-      for (const [over, side] of [
-        [lo, 'min'],
-        [hi, 'max'],
-      ] as const) {
-        if (over > 0.01) {
-          const key = `${k}${side}`;
-          const cur = worst.get(key);
-          if (!cur) {
-            worst.set(key, { axis: axes[k]!, side, amount: over, line });
-            addProblem({ kind: 'travel', line, point: [p[0]!, p[1]!, p[2]!] });
-          } else if (over > cur.amount) cur.amount = over;
-        }
-      }
+      if (lo > 0.01) over(k, 'min', lo, p, line);
+      if (hi > 0.01) over(k, 'max', hi, p, line);
     }
     if (cutting && stock && !laser && p[2]! < stock.min[2] - TOL) {
       const depth = stock.min[2] - p[2]!;
@@ -115,6 +114,7 @@ export function runChecks(input: CheckInput): CheckResult {
 
   const prev = [tp.origin[0]!, tp.origin[1]!, tp.origin[2]!];
   const end = [0, 0, 0];
+  const arcPoint = [0, 0, 0];
   for (let i = 0; i < tp.count; i++) {
     const kind = tp.kind[i]!;
     for (let k = 0; k < 3; k++) end[k] = tp.end[i * 4 + k]!;
@@ -129,9 +129,12 @@ export function runChecks(input: CheckInput): CheckResult {
       const r0 = prev[a0]! - c[a0]!;
       const r1 = prev[a1]! - c[a1]!;
       const steps = Math.max(2, Math.ceil(Math.abs(angle) / (Math.PI / 18)));
+      const p = arcPoint;
       for (let s = 1; s <= steps; s++) {
         const th = (angle * s) / steps;
-        const p = [...prev];
+        p[0] = prev[0]!;
+        p[1] = prev[1]!;
+        p[2] = prev[2]!;
         p[a0] = c[a0]! + r0 * Math.cos(th) - r1 * Math.sin(th);
         p[a1] = c[a1]! + r0 * Math.sin(th) + r1 * Math.cos(th);
         p[lin] = prev[lin]! + ((end[lin]! - prev[lin]!) * s) / steps;
@@ -153,6 +156,6 @@ export function runChecks(input: CheckInput): CheckResult {
     }
     for (let k = 0; k < 3; k++) prev[k] = end[k]!;
   }
-  res.travel = [...worst.values()].sort((a, b) => a.line - b.line);
+  res.travel = worst.filter((w): w is TravelOver => !!w).sort((a, b) => a.line - b.line);
   return res;
 }

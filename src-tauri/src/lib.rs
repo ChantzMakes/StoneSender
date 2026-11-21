@@ -60,6 +60,7 @@ pub fn run() {
             commands::text_file_read,
             commands::text_file_write,
             commands::binary_file_write,
+            commands::job_source_bytes,
             commands::job_load,
             commands::job_load_text,
             commands::job_start,

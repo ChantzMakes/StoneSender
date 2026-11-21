@@ -3,6 +3,7 @@
  * answer; an error, alarm or STOP ends the macro. Variables are asked for
  * before anything is sent.
  */
+import { HelpButton } from '@/features/help/HelpButton';
 import { Download, Pencil, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,7 @@ export function MacroPanel({ profile }: { profile: MachineProfile }) {
       <PanelTitle
         actions={
           <>
+            <HelpButton section="macros" label="Help: macros" />
             <Tip content="Import macros from a file">
               <Button variant="ghost" size="icon-sm" onClick={() => void doImport()} aria-label="Import macros" data-testid="macro-import">
                 <Upload />

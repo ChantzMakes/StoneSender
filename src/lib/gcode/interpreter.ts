@@ -118,6 +118,22 @@ function cloneState(s: InterpState): InterpState {
   };
 }
 
+/** Rollback copy that shares `offsets` (only valid for lines that can't change them). */
+function cloneMotionState(s: InterpState): InterpState {
+  return { modal: { ...s.modal, coolant: { ...s.modal.coolant } }, pos: [s.pos[0], s.pos[1], s.pos[2], s.pos[3]], offsets: s.offsets, wcsIndex: s.wcsIndex };
+}
+
+/** G10, G28.1, G30.1, G43.1, G49, G92(.1), M2, M30 change offsets. */
+function touchesOffsets(words: Word[]): boolean {
+  for (const w of words) {
+    if (w.letter === 'G') {
+      const c = Math.round(w.value * 10);
+      if (c === 100 || c === 281 || c === 301 || c === 431 || c === 490 || c === 920 || c === 921) return true;
+    } else if (w.letter === 'M' && (w.value === 2 || w.value === 30)) return true;
+  }
+  return false;
+}
+
 /** Work offset (machine = work + offset) for the active WCS. */
 export function workOffset(s: InterpState): Vec4 {
   const w = s.offsets.wcs[s.wcsIndex]!;
@@ -137,53 +153,88 @@ export interface Word {
  * Strip comments / whitespace and split into words, the way GRBL's input
  * filter does. Returns an error message for malformed lines.
  */
+const POW10 = Array.from({ length: 16 }, (_, i) => 10 ** i);
+const LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
 export function tokenize(raw: string): { words: Word[]; error?: { message: string; code: number } } {
+  // Hot path (millions of lines): scan by char code, parse each number once.
   const words: Word[] = [];
-  let i = 0;
   const n = raw.length;
-  let letter = '';
-  let num = '';
-  const flush = (): { message: string; code: number } | undefined => {
-    if (!letter) return undefined;
-    if (num === '' || num === '-' || num === '+' || num === '.') return { message: `'${letter}' needs a number`, code: 2 };
-    const v = Number(num);
-    if (!Number.isFinite(v) || (num.match(/\./g)?.length ?? 0) > 1) return { message: `'${letter}${num}' is not a valid number`, code: 2 };
-    words.push({ letter, value: v });
-    letter = '';
-    num = '';
-    return undefined;
-  };
+  let i = 0;
   while (i < n) {
-    const c = raw[i]!;
-    if (c === '(') {
+    const code = raw.charCodeAt(i);
+    if (code === 40 /* ( */) {
       const close = raw.indexOf(')', i);
       i = close < 0 ? n : close + 1;
       continue;
     }
-    if (c === ';') break;
-    if (c === ' ' || c === '\t' || c === '\r' || c === '%') {
+    if (code === 59 /* ; */) break;
+    if (code === 32 || code === 9 || code === 13 || code === 37 /* space tab CR % */) {
       i++;
       continue;
     }
-    const code = c.charCodeAt(0);
-    const isLetter = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-    if (isLetter) {
-      const e = flush();
-      if (e) return { words, error: e };
-      letter = c.toUpperCase();
+    const upper = code & ~32;
+    if (upper < 65 || upper > 90) {
+      if ((code >= 48 && code <= 57) || code === 46 || code === 45 || code === 43) return { words, error: { message: `number without a letter in front of it`, code: 1 } };
+      return { words, error: { message: `unexpected character '${raw[i]}'`, code: 1 } };
+    }
+    const letter = LETTERS[upper - 65]!;
+    i++;
+    // number: characters 0-9 . + - (spaces inside numbers are allowed by GRBL's filter)
+    let start = -1;
+    let end = -1;
+    let dots = 0;
+    let digits = 0;
+    // exact fast path: integer mantissa / 10^k is correctly rounded while mantissa < 2^53
+    let mant = 0;
+    let frac = 0;
+    let neg = false;
+    let badSign = false;
+    let text = '';
+    let split = false;
+    while (i < n) {
+      const c = raw.charCodeAt(i);
+      if (c >= 48 && c <= 57) {
+        digits++;
+        mant = mant * 10 + (c - 48);
+        if (dots) frac++;
+      } else if (c === 46) dots++;
+      else if (c === 45 || c === 43) {
+        if (start >= 0 || split) badSign = true;
+        else neg = c === 45;
+      } else if (c === 32 || c === 9 || c === 13) {
+        if (start >= 0) {
+          // whitespace inside a number: keep scanning only if more number follows
+          let j = i + 1;
+          while (j < n && (raw.charCodeAt(j) === 32 || raw.charCodeAt(j) === 9 || raw.charCodeAt(j) === 13)) j++;
+          const d = j < n ? raw.charCodeAt(j) : 0;
+          if ((d >= 48 && d <= 57) || d === 46 || d === 45 || d === 43) {
+            text += raw.slice(start, end);
+            start = -1;
+            split = true;
+            i = j;
+            continue;
+          }
+        }
+        i++;
+        if (start < 0 && !split) continue;
+        break;
+      } else break;
+      if (start < 0) start = i;
+      end = i + 1;
       i++;
+    }
+    if (digits > 0 && !badSign && dots <= 1 && digits <= 15) {
+      const v = frac ? mant / POW10[frac]! : mant;
+      words.push({ letter, value: neg ? -v : v });
       continue;
     }
-    if ((code >= 48 && code <= 57) || c === '.' || c === '-' || c === '+') {
-      if (!letter) return { words, error: { message: `number without a letter in front of it`, code: 1 } };
-      num += c;
-      i++;
-      continue;
-    }
-    return { words, error: { message: `unexpected character '${c}'`, code: 1 } };
+    const num = start >= 0 ? text + raw.slice(start, end) : text;
+    if (num === '' || digits === 0) return { words, error: { message: `'${letter}' needs a number`, code: 2 } };
+    const v = badSign || dots > 1 ? NaN : Number(num);
+    if (!Number.isFinite(v)) return { words, error: { message: `'${letter}${num}' is not a valid number`, code: 2 } };
+    words.push({ letter, value: v });
   }
-  const e = flush();
-  if (e) return { words, error: e };
   return { words };
 }
 
@@ -228,6 +279,8 @@ export class Interpreter {
   changesOffsets = false;
   checkpoints: Checkpoint[] = [];
   private checkpointEvery: number;
+  private groupsSeen = new Set<string>();
+  private vals = new Map<string, number>();
   lines = 0;
 
   constructor(opts: InterpretOptions = {}) {
@@ -266,7 +319,8 @@ export class Interpreter {
       this.warnedAfterEnd = true;
       this.diag(n, 'info', 'commands after the program end (M2/M30) — they still run');
     }
-    const snapshot = cloneState(this.state);
+    // Offsets change only on these words; other lines can share them in the rollback snapshot.
+    const snapshot = touchesOffsets(words) ? cloneState(this.state) : cloneMotionState(this.state);
     const mark = { seg: this.tp.count, arc: this.tp.arcCount, tc: this.toolChanges.length, pause: this.pauses.length, sync: this.pendingSync, paused: this.pendingPause, ended: this.programEnded };
     try {
       this.execute(words, n);
@@ -313,8 +367,10 @@ export class Interpreter {
     let spindleCmd: ModalState['spindle'] | null = null;
     const coolantCmds: number[] = [];
     let m6 = false;
-    const groups = new Set<string>();
-    const vals = new Map<string, number>();
+    const groups = this.groupsSeen;
+    const vals = this.vals;
+    groups.clear();
+    vals.clear();
     const group = (g: string) => {
       if (groups.has(g)) throw new LineError('two commands from the same group on one line', 21);
       groups.add(g);
@@ -330,7 +386,7 @@ export class Interpreter {
           case 30:
           case 800:
             group('motion');
-            motion = ({ 0: 'G0', 10: 'G1', 20: 'G2', 30: 'G3', 800: 'G80' } as Record<number, ModalState['motion']>)[code]!;
+            motion = code === 0 ? 'G0' : code === 10 ? 'G1' : code === 20 ? 'G2' : code === 30 ? 'G3' : 'G80';
             break;
           case 382:
           case 383:
@@ -750,15 +806,36 @@ export function splitLines(text: string): string[] {
   return lines.map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l));
 }
 
+/** Calls `fn(line, n)` for each line like `splitLines`, without building the array. */
+export function forEachLine(text: string, fn: (line: string, n: number) => void, from = 1, to = Infinity) {
+  let pos = 0;
+  let n = 0;
+  const len = text.length;
+  while (pos < len) {
+    let nl = text.indexOf('\n', pos);
+    if (nl < 0) nl = len;
+    n++;
+    if (n > to) return;
+    if (n >= from) fn(text.charCodeAt(nl - 1) === 13 && nl > pos ? text.slice(pos, nl - 1) : text.slice(pos, nl), n);
+    pos = nl + 1;
+  }
+}
+
 export function interpret(text: string, opts: InterpretOptions = {}, onProgress?: (done: number, total: number) => void): InterpretResult {
   const it = new Interpreter(opts);
   const startWo = workOffset(it.state);
-  const lines = splitLines(text);
-  const total = lines.length;
-  for (let i = 0; i < total; i++) {
-    it.line(lines[i]!, i + 1);
-    if (onProgress && i % 50000 === 0) onProgress(i, total);
-  }
+  // progress by characters: no up-front line count needed
+  const total = text.length;
+  let next = 0;
+  let pos = 0;
+  forEachLine(text, (l, n) => {
+    pos += l.length + 1;
+    it.line(l, n);
+    if (onProgress && pos >= next) {
+      next = pos + 2_000_000;
+      onProgress(pos, total);
+    }
+  });
   const r = it.finish();
   r.startWorkOffset = startWo;
   return r;
@@ -778,7 +855,6 @@ export function stateBeforeLine(text: string, result: Pick<InterpretResult, 'che
     it.state = cloneState(cp.state);
     from = cp.line;
   }
-  const lines = splitLines(text);
-  for (let i = from; i < line && i <= lines.length; i++) it.line(lines[i - 1]!, i);
+  forEachLine(text, (l, i) => it.line(l, i), from, line - 1);
   return cloneState(it.state);
 }

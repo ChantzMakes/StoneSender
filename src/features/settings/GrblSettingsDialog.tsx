@@ -5,6 +5,7 @@
  * individual change in the confirmation list (spec §8 — this also covers
  * values coming from an imported profile or a restored backup).
  */
+import { HelpButton } from '@/features/help/HelpButton';
 import { ArrowLeftRight, Download, RefreshCw, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -170,7 +171,9 @@ export function GrblSettingsDialog({ profile }: { profile: MachineProfile }) {
       <Dialog open={settingsOpen} onOpenChange={(o) => !o && closeSettings()}>
         <DialogContent className="h-[85vh] max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Controller settings</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Controller settings <HelpButton section="controller-settings" label="Help: controller settings" />
+            </DialogTitle>
             <DialogDescription>
               {firmware ? `${firmware.kind === 'grblhal' ? 'grblHAL' : 'GRBL'} ${firmware.version}` : 'Not connected'} · {ids.length} settings
               {!canWrite && connected && ' · writing needs the machine Idle (or in Alarm) and no job running'}

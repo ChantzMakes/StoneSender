@@ -55,10 +55,11 @@ export const tauriBackend: Backend = {
   },
   async loadJobPath(path) {
     const job = await invoke<LoadedJob>('job_load', { path });
-    const text = await invoke<string>('text_file_read', { path });
-    return { job, text };
+    // Raw bytes, not a JSON string: a 5M-line file is ~175 MB.
+    const bytes = await invoke<ArrayBuffer>('job_source_bytes');
+    return { job, text: new TextDecoder().decode(bytes) };
   },
-  loadJobText: (name, text) => invoke<LoadedJob>('job_load_text', { name, text }),
+  loadJobText: (name, text) => invoke<LoadedJob>('job_load_text', new TextEncoder().encode(text), { headers: { name: encodeURIComponent(name) } }),
   jobStart: (mode, options) => invoke('job_start', { mode, options: options ?? null }),
   jobToolChangeDone: () => invoke('job_tool_change_done'),
   jobPause: () => invoke('job_pause'),

@@ -12,8 +12,9 @@ The spec is delivered in phases; **stop after each phase for the owner's confirm
 | 5 | Parametric machine model (router/laser/combo/rotary, gantry/table kinematics), accel-aware playback, travel/below-stock/rapid-through-stock checks in the view and pre-flight | **done** |
 | 6 | Material removal: stock, tool library, heightmap removal, laser burn, rotary sim, STL/PNG export | **done** |
 | 7a | Start-from-line, guided tool changes, probing wizards, height-map auto-leveling | **done** |
-| 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | **done** (awaiting review) |
-| 8 | Polish / distribution | next |
+| 7b | Laser framing, macros (with sharing), generators + G-code transforms, gamepad | **done** |
+| 8a | Themes, layouts, shortcuts, in-app help, preferences, 5M-line performance pass | **done** (awaiting review) |
+| 8b | Installers (Windows/macOS/Linux), signing, auto-update, CI on GitHub Actions + Releases | next |
 
 ## Commands
 
@@ -34,10 +35,15 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Regenerate icons | `npm run icons` (from `app-icon.svg`) |
 | Stress G-code | `node scripts/gen-stress.mjs 5000000` |
 | Emulator timing fixtures | `node scripts/gen-timing-fixtures.mjs` (re-run after changing the emulator motion model or the samples) |
+| Perf: analysis stages | `npm run perf` (Vitest, `scripts/perf/analysis.perf.ts`; needs the stress file) |
+| Perf: Rust scan | `cargo test --release -p grbl-core --test perf -- --ignored --nocapture` |
+| Perf: browser main thread | `$env:PERF_E2E=1; npx playwright test perf --workers 1` (`PERF_PROFILE=<file>` saves a CPU profile) |
+| Perf: desktop app | start with `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9333'; npx tauri dev --release`, then `node scripts/perf/desktop-load.mjs` |
 
-All of the above pass as of the end of Phase 7b (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
-tests against the emulator; Vitest: 153 incl. planner-vs-emulator timing, removal/export, recovery, probing,
-leveling, transforms, generators, macros and gamepad mapping; Playwright: 33, run with 4 workers because headless
+All of the above pass as of the end of Phase 8a (Rust: 85 tests incl. 19 link/streaming and 5 Phase 7 integration
+tests against the emulator, plus 1 ignored perf test; Vitest: 166 incl. planner-vs-emulator timing, removal/export,
+recovery, probing, leveling, transforms, generators, macros, gamepad mapping, shortcuts, help markdown (every
+in-app help link must hit a guide section); Playwright: 36 + 1 opt-in perf spec, run with 4 workers because headless
 Chromium renders WebGL in software — `freshApp` sets a 1 mm simulation grid and long flows use `test.slow()`;
 clippy clean with `-D warnings`).
 
@@ -206,6 +212,18 @@ docs/USER_GUIDE.md
     D-pad / Y / A buttons step-jog; it uses the same continuous-jog engine (heartbeats, cancel on release).
     Releasing the button, centring the stick, losing the pad, window blur or tab hide stops the jog. The
     gamepad never runs jobs, zeroes or homes.
+30. **Shortcuts (owner decision: "STOP fixed + opt-in jog keys"):** Esc is always STOP while moving and can't
+    be rebound or reused; a second STOP key and a feed-hold key can be added (both unbound by default). Jog
+    keys (default arrows / PgUp / PgDn, single keys only) work only while the Jog panel's **Keys** switch is
+    on — a session-only flag in `store/ui.ts`, off at every start, deliberately not saved. Key release, blur
+    or tab hide ends the jog (same engine as the buttons). No shortcut starts a job, resumes, homes or zeroes;
+    shortcuts are ignored while typing (inputs, Monaco, dialogs) except F1 (help) and feed hold outside text
+    fields. Tab/Enter/Space/editing keys can't be bound.
+31. **Layouts never hide safety-relevant UI:** the DRO column and the header STOP are always rendered; the
+    header wraps onto two lines instead of clipping, so STOP stays visible at 1024 px × 150 % UI size.
+    Every layout preset keeps the Job panel.
+32. Developer tools (virtual-machine fault injection) moved from a header toggle to Preferences → Advanced;
+    the header shows a bug icon only while they are on.
 
 ## G-code engine conventions (Phase 3)
 
@@ -303,6 +321,35 @@ docs/USER_GUIDE.md
 - drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
 - With the machine model hidden, moving-table machines no longer slide the job in Y.
 
+## Phase 8a conventions
+
+- **Preferences** (`features/settings/PreferencesDialog.tsx`, `store/ui.ts` `prefs`): Appearance (theme
+  system/dark/light/contrast, UI scale = root font size since everything is rem), Layout (presets in
+  `lib/theme.ts`, per-panel switches, swap sides, "Reset sizes" clears `react-resizable-panels:*` localStorage
+  keys and remounts via `layoutEpoch`), Shortcuts, Gamepad (the Phase 7b settings now have UI), Advanced.
+- Theme: `lib/theme.ts` `applyTheme` sets `.dark` + `.contrast` on `<html>`; `.dark.contrast` overrides the
+  tokens in `index.css`. Canvases use `useResolvedTheme()` (3D view palette, Monaco theme).
+- Shortcuts: `lib/shortcuts.ts` (registry, `keyName` — Cmd counts as Ctrl, Shift only named for non-printing
+  keys — `bindingProblem` validation), `features/layout/useShortcuts.ts` (global non-motion actions),
+  StopButton (capture phase, Esc + `stop.extra`), JogPanel (jog/step keys). Overrides live in
+  `settings.shortcuts` (id → key or null).
+- Help: `docs/USER_GUIDE.md` is bundled with `?raw` and parsed by `lib/markdown.ts` (small subset → block tree →
+  React elements, no HTML injection; links only `#…`/`http(s)`). `HelpButton section="slug"` opens a section;
+  a unit test fails if a slug isn't a guide heading. The help dialog also lists shortcuts and the GRBL
+  error/alarm table from `lib/grbl/codes.ts`.
+- **Performance pass (5M-line stress file, 176 MB):**
+  | Stage | Before | After |
+  |---|---|---|
+  | Interpreter (Node) | 17 s | ~5.5 s — char-code tokenizer with exact fast number parse, no per-line `split`, rollback snapshot shares offsets unless the line can change them |
+  | Planner | 3.7 s | 1.1 s — ring buffer, no per-move allocations |
+  | Rust scan / prepared lines | 1.75 s, ~370 MB of per-line Strings | 1.5 s, one text buffer + offsets (`PreparedLines`) |
+  | Collision checks (main thread) | 1.8 s | ~0.4 s — no allocations per sample point |
+  | Browser preview: file → loaded | 9.6 s | 3.4 s (quick scan rewritten) |
+  | Desktop (release): file → loaded / analysed | — | 4.2 s / 13.6 s, longest main-thread pause 1.2 s |
+  Desktop loads send the text as raw bytes (`job_source_bytes`, `job_load_text` with a raw body + `name`
+  header) instead of a JSON string, and the file is read once. `job_start` prepares under the lock instead of
+  cloning the text.
+
 ## Phase 7b conventions
 
 - `lib/gcode/transform.ts`: rigid transforms keep arcs (I/J rotated as vectors, mirror swaps G2/G3 and adds
@@ -365,10 +412,24 @@ spindle changes, parking, G-code line numbers in `Ln:`, EEPROM write delays, ser
 Known simplification: after a probe-fail alarm (ALARM:5) the emulator still sends `[PRB:…:0]` and `ok` —
 matches my reading of GRBL 1.1 source; verify against hardware.
 
+## Known gaps after Phase 8a
+
+- App name/identifier are still the placeholders (`CNC Sender`, `dev.cncsender.app`); the owner will give the
+  final ones before 8b (they are baked into installers and the updater).
+- Remaining big-file costs: the text is still held in Rust, the UI store and the worker (≈3 × file size);
+  the 3D view keeps CPU copies of its vertex buffers (needed to rebuild after the view remounts); the WebGL
+  upload of ~5M vertices and the result hand-off are the 0.7–1.2 s main-thread pauses that remain. The
+  material-removal init still runs the whole job once (in its worker).
+- Help is the user guide plus shortcuts and codes; there are no screenshots or videos. Layout is preset +
+  panel switches, not drag-and-drop docking. Shortcut capture can't bind keys the OS or WebView2 keep
+  (e.g. Alt+F4, F5/F12 in dev builds may be swallowed by devtools).
+- React logs "Attempted to synchronously unmount a root while React was already rendering" when a big job
+  replaces the 3D scene (drei `<Html>` labels with React 19) — harmless, seen in the desktop dev build.
+
 ## Known gaps after Phase 7b
 
-- Gamepad settings (enable button, dead zone, on/off) exist in the settings file but have no UI; only
-  standard-mapping pads were considered; tested with a stubbed Gamepad API, not a real controller.
+- Only standard-mapping gamepads were considered; tested with a stubbed Gamepad API, not a real controller.
+  (Settings UI added in Phase 8a.)
 - Laser framing traces the bounding rectangle only (no convex hull); it can't be stopped from its own
   button (use STOP).
 - Generators are basic: pockets plunge (no ramp/helix), no tabs, no cutter-compensated profiles; surfacing

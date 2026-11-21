@@ -2,8 +2,8 @@
 
 This guide is for people who want to *use* the app with their machine. No programming needed.
 
-> **Beta.** You can set up machines, connect, jog, zero, run and check jobs. The 3D preview and accurate time
-> estimates are coming. Try new files on air (bit raised) or scrap first.
+> **Tip:** press **F1** in the app to open this guide. The small **?** next to each panel opens the part that
+> explains it. Try new files on air (bit raised) or on scrap first.
 
 ## ⚠️ Safety first
 
@@ -64,19 +64,27 @@ if you know where the machine is.
 ## 4. Moving the machine and setting zero
 
 - **Jog panel** (right side): click an arrow to move one step (pick the step size underneath); **press and
-  hold** to move continuously until you let go. The keyboard works too: arrow keys for X/Y, Page Up / Page
-  Down for Z.
+  hold** to move continuously until you let go. To jog with the keyboard, switch on **Keys** in the Jog
+  panel: then the arrow keys move X/Y and Page Up / Page Down move Z (tap = one step, hold = move), and
+  [ / ] change the step. **Keys** is off every time the app starts, so a key pressed by accident can't
+  move the machine. You can choose other keys in Preferences.
 - **Home** finds the limit switches (if your machine has them).
 - **Set work zero:** jog the bit to the corner/top of your stock, then click **X0**, **Y0**, **Z0** or **All**.
 - **To XY0** lifts the bit to a safe height and goes back to your work zero. **Park** moves out of the way.
 - **Work offsets…** shows and edits G54–G59 if you use more than one zero.
-- **Overrides** change feed and spindle (or laser power) speed live while a job runs.
+
+### Overrides
+
+The **Overrides** panel changes the feed speed, the rapid speed and the spindle speed (or laser power)
+**while a job runs**, without editing the file — for example slow down if the cut sounds rough. The
+change takes effect within a moment; the ↺ button returns to 100 %. The controller forgets overrides
+when it resets.
 
 ## 5. Running a job
 
 1. Click **Open G-code file…** in the Job panel (or drop a file on the window, or pick one under
    *Recent*). The app checks every line and shows the **estimated time**, the size of the cut, the deepest
-   cut and the feeds used. The **G-code** tab (next to *Work area*) shows the file with problems
+   cut and the feeds used. The **G-code** tab (next to *3D view*) shows the file with problems
    underlined — hover any code to see what it does. You can edit there and click *Use edited version*.
 2. Click **Check** for a dry run: the controller reads the whole file without moving and reports any line
    it would reject.
@@ -167,7 +175,8 @@ ones to add. Macros can't change controller settings.
 
 Plug in a game controller and **hold LB**: the left stick jogs X/Y (push further = faster), the right stick
 jogs Z, the D-pad jogs one step in X/Y and Y / A step Z up / down. Let go of LB and it stops. The gamepad
-can't start jobs or set zero.
+can't start jobs or set zero. In **Preferences → Gamepad** you can turn it off, pick another button to hold,
+or raise the dead zone if the machine creeps with the sticks let go.
 
 ### Probing
 
@@ -207,7 +216,42 @@ replies. Error and alarm numbers are explained in plain words.
 Even with a shared profile, every machine is a little different: always check the work area, home corner and
 spindle settings match **your** machine.
 
-## 9. Where things are saved
+## 9. Making the app your own
+
+Open **Preferences** with the ⚙ button at the top right (or **Ctrl + ,**). Nothing there is sent to your
+machine.
+
+### Theme and size
+
+Choose **Dark**, **Light**, **High contrast** (black background, bold colours — easy to read from across
+the shop or in sunlight) or **Same as the computer**. *Size of text and buttons* makes everything bigger
+(up to 150 %), handy on a touch screen or a laptop at arm's length.
+
+### Layout
+
+Pick a layout for what you are doing — **Standard**, **Running a job** (big 3D view, no jogging or macros),
+**Setting up** (jogging, zeroing and probing up front) or **Touch screen** (larger controls) — or switch
+single panels on and off. The position readout and the STOP button are always shown. *Swap sides* puts the
+Job and Jog panels on the left. Drag the borders between panels to resize them; *Reset sizes* undoes that.
+
+### Keyboard shortcuts
+
+| Key | What it does |
+|---|---|
+| **Esc** | STOP while the machine moves (always — it can't be changed) |
+| **F1** | This guide |
+| **Ctrl + O** | Open a G-code file |
+| **Ctrl + E** | Switch between the 3D view and the G-code |
+| **Ctrl + J** | Show or hide the console |
+| **Ctrl + ,** | Preferences |
+| **← → ↑ ↓**, **Page Up / Page Down** | Jog, only while **Keys** is on in the Jog panel |
+| **[** / **]** | Smaller / bigger jog step (while **Keys** is on) |
+
+Change any of them in **Preferences → Shortcuts**, where you can also add a second STOP key or a key for
+*Pause*. No shortcut can start a job, resume after a pause, home or set zero — those always need a click.
+On a Mac, use **Cmd** instead of **Ctrl**.
+
+## 10. Where things are saved
 
 Profiles and settings are stored on your computer:
 

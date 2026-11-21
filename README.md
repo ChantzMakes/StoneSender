@@ -3,7 +3,11 @@
 A modern G-code sender, visualizer and machine simulator for GRBL-based CNC routers, lasers and rotary
 machines. Desktop app for Windows, macOS and Linux (Tauri 2 + React + Rust).
 
-> **Status: Phase 7b of 8.** Adds laser framing, macro buttons with variables (shareable as files, reviewed on
+> **Status: Phase 8a of 8.** Adds Preferences (dark / light / high-contrast / system theme, UI size, layout
+> presets and panel switches, rebindable keyboard shortcuts with Esc fixed as STOP and opt-in keyboard
+> jogging, gamepad settings), in-app help (F1: the user guide with search, context "?" buttons, shortcut
+> list, error/alarm codes) and a performance pass for 5M-line files. Installers and auto-update are 8b.
+> Phase 7b added laser framing, macro buttons with variables (shareable as files, reviewed on
 > import), generators (surfacing, pockets, drilling patterns, outline trace), G-code transforms (move, rotate,
 > mirror, scale, arcs → lines, feed scaling) and gamepad jogging with a hold-to-enable button.
 > Phase 7a added start-from-line with modal recovery, guided tool changes (pause, touch-plate

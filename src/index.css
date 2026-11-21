@@ -84,6 +84,33 @@
   --ring: oklch(0.68 0.15 245);
 }
 
+/* High contrast (Phase 8): black background, white text, bold borders and colours —
+   readable from across the shop and in direct light. Applied together with .dark. */
+.dark.contrast {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.14 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.82 0.17 210);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.88 0 0);
+  --accent: oklch(0.3 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.66 0.25 27);
+  --destructive-foreground: oklch(1 0 0);
+  --warning: oklch(0.88 0.18 95);
+  --success: oklch(0.82 0.2 145);
+  --info: oklch(0.82 0.14 230);
+  --border: oklch(0.7 0 0);
+  --input: oklch(0.75 0 0);
+  --ring: oklch(0.9 0.18 95);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

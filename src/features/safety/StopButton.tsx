@@ -8,7 +8,8 @@
  * missing status report can never delay the reset (which also turns off the
  * spindle/laser) by more than that.
  *
- * Shortcut: Escape, but only while the machine may be moving, so Escape still
+ * Shortcut: Escape (fixed — owner decision) plus an optional second key from
+ * Preferences, but only while the machine may be moving, so Escape still
  * closes dialogs when idle. This is not an E-stop and the UI says so.
  */
 import { OctagonX } from 'lucide-react';
@@ -17,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Tip } from '@/components/ui/primitives';
 import { sysMessage } from '@/store/console';
 import { backend } from '@/lib/backend';
+import { bindings, displayKey, keyName } from '@/lib/shortcuts';
+import { useApp } from '@/store/app';
 import { isActivePhase, isMotionState, useLink } from '@/store/link';
 
 export const STOP_RESET_TIMEOUT_MS = 800;
@@ -67,14 +70,15 @@ export function StopButton() {
   const state = useLink((s) => s.state);
   const disabled = state === 'disconnected';
 
+  const extra = useApp((s) => bindings(s.settings.shortcuts).get('stop.extra') ?? null);
   const onKey = useCallback((e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' && (!extra || keyName(e) !== extra)) return;
     if (isMotionState(useLink.getState().status)) {
       e.preventDefault();
       e.stopPropagation();
       void emergencyStop();
     }
-  }, []);
+  }, [extra]);
 
   useEffect(() => {
     window.addEventListener('keydown', onKey, { capture: true });
@@ -86,7 +90,14 @@ export function StopButton() {
       side="bottom"
       content={
         <span>
-          Feed hold + reset (shortcut: <kbd>Esc</kbd> while moving).
+          Feed hold + reset (shortcut: <kbd>Esc</kbd>
+          {extra ? (
+            <>
+              {' '}
+              or <kbd>{displayKey(extra)}</kbd>
+            </>
+          ) : null}{' '}
+          while moving).
           <br />
           <strong>Not a substitute for a hardware E-stop.</strong>
         </span>

@@ -1,6 +1,8 @@
 /**
  * Jog panel: click = one step, press and hold = continuous jog (cancelled on
- * release). Keyboard: arrows = X/Y, Page Up/Down = Z, same tap/hold rules.
+ * release). Keyboard (only while the session's "Keyboard jog" switch is on —
+ * owner decision): arrows = X/Y, Page Up/Down = Z by default (rebindable in
+ * Preferences), same tap/hold rules, [ / ] change the step.
  * Continuous jogging streams short $J= chunks from the Rust engine while we
  * send heartbeats; if the UI stops sending them (frozen, focus lost) motion
  * stops by itself within ~0.35 s.
@@ -8,7 +10,12 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronsDown, ChevronsUp } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input, PanelTitle, Tip } from '@/components/ui/primitives';
+import { Input, PanelTitle, Switch, Tip } from '@/components/ui/primitives';
+import { HelpButton } from '@/features/help/HelpButton';
+import { isTypingTarget } from '@/features/layout/useShortcuts';
+import { bindings, displayKey, JOG_SHORTCUTS, keyName } from '@/lib/shortcuts';
+import { useApp } from '@/store/app';
+import { useUi } from '@/store/ui';
 import { backend } from '@/lib/backend';
 import { stepJog } from '@/lib/grbl/commands';
 import { useGamepad } from './useGamepad';
@@ -107,19 +114,6 @@ function useJogger(profile: MachineProfile, feedXY: number, feedZ: number, stepM
   return { begin, end };
 }
 
-const KEYS: Record<string, Dir> = {
-  ArrowLeft: [-1, 0, 0],
-  ArrowRight: [1, 0, 0],
-  ArrowUp: [0, 1, 0],
-  ArrowDown: [0, -1, 0],
-  PageUp: [0, 0, 1],
-  PageDown: [0, 0, -1],
-};
-
-function typingTarget(el: EventTarget | null): boolean {
-  const t = el as HTMLElement | null;
-  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable || !!t.closest('[role="dialog"],[role="listbox"],[role="menu"]'));
-}
 
 export function JogPanel({ profile }: { profile: MachineProfile }) {
   const units = profile.units;
@@ -136,23 +130,51 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
     setFeedZ(profile.defaults.jog.feedZ);
   }, [profile.id, profile.defaults.jog]);
 
+  const keyboardJog = useUi((s) => s.keyboardJog);
+  const setKeyboardJog = useUi((s) => s.setKeyboardJog);
+  const overrides = useApp((s) => s.settings.shortcuts);
+  const keys = bindings(overrides);
+  const steps = profile.defaults.jog.stepsMm;
+
   useEffect(() => {
+    if (!keyboardJog) return;
+    const map = bindings(overrides);
+    const byKey = new Map<string, string>();
+    for (const [id, k] of map) if (k && (JOG_SHORTCUTS[id] || id === 'jog.stepUp' || id === 'jog.stepDown')) byKey.set(k, id);
+    let held: string | null = null; // e.key of the key that started the jog
     const down = (e: KeyboardEvent) => {
-      const dir = KEYS[e.key];
-      if (!dir || typingTarget(e.target) || !available) return;
+      const name = keyName(e);
+      const id = name ? byKey.get(name) : undefined;
+      if (!id || isTypingTarget(e.target)) return;
       e.preventDefault();
-      if (!e.repeat) begin(dir);
+      if (e.repeat) return;
+      if (id === 'jog.stepUp' || id === 'jog.stepDown') {
+        setStepMm((cur) => {
+          const i = steps.indexOf(cur);
+          const j = Math.min(steps.length - 1, Math.max(0, (i < 0 ? 0 : i) + (id === 'jog.stepUp' ? 1 : -1)));
+          return steps[j] ?? cur;
+        });
+        return;
+      }
+      if (!available || held) return;
+      held = e.key;
+      begin(JOG_SHORTCUTS[id]!);
     };
     const up = (e: KeyboardEvent) => {
-      if (KEYS[e.key]) end();
+      // Any release of the jog key ends it, whatever modifiers changed meanwhile.
+      if (held && e.key.toLowerCase() === held.toLowerCase()) {
+        held = null;
+        end();
+      }
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      if (held) end();
     };
-  }, [available, begin, end]);
+  }, [available, begin, end, keyboardJog, overrides, steps]);
 
   const btn = (dir: Dir, label: string, icon: React.ReactNode, testId: string, className?: string) => (
     <Button
@@ -183,7 +205,38 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
 
   return (
     <div className="flex flex-col">
-      <PanelTitle>Jog</PanelTitle>
+      <PanelTitle
+        actions={
+          <div className="flex items-center gap-2">
+            <Tip
+              content={
+                <span>
+                  Jog with the keyboard: {displayKey(keys.get('jog.x-') ?? null)} {displayKey(keys.get('jog.x+') ?? null)} {displayKey(keys.get('jog.y+') ?? null)} {displayKey(keys.get('jog.y-') ?? null)} move X/Y,{' '}
+                  {displayKey(keys.get('jog.z+') ?? null)} / {displayKey(keys.get('jog.z-') ?? null)} move Z. Tap = one step, hold = move until you let go.
+                  <br />
+                  Off every time the app starts, so a stray key press can't move the machine.
+                </span>
+              }
+            >
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs font-normal normal-case tracking-normal text-muted-foreground">
+                <Switch
+                  checked={keyboardJog}
+                  onCheckedChange={(on) => {
+                    if (!on) end();
+                    setKeyboardJog(on);
+                  }}
+                  aria-label="Keyboard jog"
+                  data-testid="keyboard-jog"
+                />
+                Keys
+              </label>
+            </Tip>
+            <HelpButton section="moving-the-machine-and-setting-zero" label="Help: jogging" />
+          </div>
+        }
+      >
+        Jog
+      </PanelTitle>
       <div className="flex flex-col gap-3 p-3">
         {pad.connected && (
           <div className={cn('rounded-md border px-2 py-1 text-xs', pad.enabled ? 'border-warning/60 bg-warning/10' : 'text-muted-foreground')} data-testid="gamepad-status">
@@ -211,7 +264,7 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
         <div>
           <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>Step ({unitLabel('length', units)})</span>
-            <Tip content="Click a button to move one step. Hold it (or an arrow key / Page Up / Page Down) to move continuously until you let go.">
+            <Tip content="Click a button to move one step. Hold it to move continuously until you let go.">
               <span className="cursor-help underline decoration-dotted">click = step, hold = move</span>
             </Tip>
           </div>

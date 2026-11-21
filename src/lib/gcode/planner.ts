@@ -76,10 +76,27 @@ interface Block {
   seg: number;
 }
 
+/** Smallest of values[i] / |u[i]| over the axes that move. */
+function axisLimit(values: number[], u0: number, u1: number, u2: number, u3: number): number {
+  let v = LARGE;
+  if (Math.abs(u0) > 1e-9) v = Math.min(v, values[0]! / Math.abs(u0));
+  if (Math.abs(u1) > 1e-9) v = Math.min(v, values[1]! / Math.abs(u1));
+  if (Math.abs(u2) > 1e-9) v = Math.min(v, values[2]! / Math.abs(u2));
+  if (Math.abs(u3) > 1e-9) v = Math.min(v, values[3]! / Math.abs(u3));
+  return v;
+}
+
+/**
+ * Hot path (one call per move or arc chord, millions per job): blocks live in
+ * a preallocated ring buffer and nothing is allocated per move.
+ */
 class Planner {
-  private queue: Block[] = [];
+  private ring: Block[];
+  private head = 0;
+  private size = 0;
   private vEntrySqr = 0;
-  private prevUnit: number[] | null = null;
+  private hasPrev = false;
+  private pu = [0, 0, 0, 0];
   private prevNominalSqr = 0;
   private time = 0;
   blocks = 0;
@@ -90,65 +107,79 @@ class Planner {
     private cfg: PlannerConfig,
     private duration: Float32Array,
     private motion: Float32Array,
-  ) {}
+  ) {
+    this.ring = Array.from({ length: Math.max(1, cfg.plannerBlocks) }, () => ({ len: 0, nominalSqr: 0, accel: 0, maxEntrySqr: 0, seg: 0 }));
+  }
 
   get elapsed() {
     return this.time;
   }
 
-  /** Add a straight move. `feed` mm/min, or null for a rapid. */
-  add(delta: number[], feed: number | null, seg: number) {
-    let lenSq = 0;
-    for (const d of delta) lenSq += d * d;
-    const len = Math.sqrt(lenSq);
+  /** Add a straight move (deltas in mm / deg). `feed` mm/min, or null for a rapid. */
+  add(d0: number, d1: number, d2: number, d3: number, feed: number | null, seg: number) {
+    const len = Math.sqrt(d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3);
     if (len < 1e-6) return;
-    const unit = delta.map((d) => d / len);
-    const limit = (values: number[], u: number[]) => {
-      let v = LARGE;
-      for (let i = 0; i < 4; i++) if (Math.abs(u[i]!) > 1e-9) v = Math.min(v, values[i]! / Math.abs(u[i]!));
-      return v;
-    };
-    const accel = limit(this.cfg.accel, unit);
-    const rapid = limit(this.cfg.maxRate, unit) / 60;
+    const u0 = d0 / len;
+    const u1 = d1 / len;
+    const u2 = d2 / len;
+    const u3 = d3 / len;
+    const accel = axisLimit(this.cfg.accel, u0, u1, u2, u3);
+    const rapid = axisLimit(this.cfg.maxRate, u0, u1, u2, u3) / 60;
     const nominal = feed === null ? rapid : Math.min(feed / 60, rapid);
     const nominalSqr = nominal * nominal;
 
+    const pu = this.pu;
     let junctionSqr: number;
-    if (!this.prevUnit) {
+    if (!this.hasPrev) {
       junctionSqr = 0;
     } else {
-      let cos = 0;
-      for (let i = 0; i < 4; i++) cos -= this.prevUnit[i]! * unit[i]!;
+      const cos = -(pu[0]! * u0 + pu[1]! * u1 + pu[2]! * u2 + pu[3]! * u3);
       if (cos > 0.999999) junctionSqr = MIN_JUNCTION_SPEED_SQR;
       else if (cos < -0.999999) junctionSqr = LARGE;
       else {
-        const ju = unit.map((u, i) => u - this.prevUnit![i]!);
-        const jl = Math.hypot(...ju);
-        const jAccel = jl > 0 ? limit(this.cfg.accel, ju.map((v) => v / jl)) : accel;
+        const j0 = u0 - pu[0]!;
+        const j1 = u1 - pu[1]!;
+        const j2 = u2 - pu[2]!;
+        const j3 = u3 - pu[3]!;
+        const jl = Math.sqrt(j0 * j0 + j1 * j1 + j2 * j2 + j3 * j3);
+        const jAccel = jl > 0 ? axisLimit(this.cfg.accel, j0 / jl, j1 / jl, j2 / jl, j3 / jl) : accel;
         const sinHalf = Math.sqrt(0.5 * (1 - cos));
         junctionSqr = Math.max(MIN_JUNCTION_SPEED_SQR, (jAccel * this.cfg.junctionDeviation * sinHalf) / (1 - sinHalf));
       }
     }
     const maxEntrySqr = Math.min(junctionSqr, nominalSqr, this.prevNominalSqr);
-    this.prevUnit = unit;
+    this.hasPrev = true;
+    pu[0] = u0;
+    pu[1] = u1;
+    pu[2] = u2;
+    pu[3] = u3;
     this.prevNominalSqr = nominalSqr;
-    this.queue.push({ len, nominalSqr, accel, maxEntrySqr, seg });
+    const b = this.ring[(this.head + this.size) % this.ring.length]!;
+    b.len = len;
+    b.nominalSqr = nominalSqr;
+    b.accel = accel;
+    b.maxEntrySqr = maxEntrySqr;
+    b.seg = seg;
+    this.size++;
     this.blocks++;
-    if (this.queue.length >= this.cfg.plannerBlocks) this.executeHead();
+    if (this.size >= this.ring.length) this.executeHead();
   }
 
   /** Execute the head block given what is currently buffered (must stop after the last). */
   private executeHead() {
-    const q = this.queue;
+    const ring = this.ring;
+    const cap = ring.length;
     // Backward pass over the buffer: entry speeds that still allow stopping at the end.
     let nextEntrySqr = 0;
-    for (let i = q.length - 1; i >= 1; i--) {
-      const b = q[i]!;
+    for (let i = this.size - 1; i >= 1; i--) {
+      const b = ring[(this.head + i) % cap]!;
       nextEntrySqr = Math.min(b.maxEntrySqr, nextEntrySqr + 2 * b.accel * b.len);
     }
-    const head = q.shift()!;
+    const head = ring[this.head]!;
+    this.head = (this.head + 1) % cap;
+    this.size--;
     const v0 = Math.sqrt(this.vEntrySqr);
-    const exitSqr = Math.min(q.length ? nextEntrySqr : 0, this.vEntrySqr + 2 * head.accel * head.len, head.nominalSqr);
+    const exitSqr = Math.min(this.size ? nextEntrySqr : 0, this.vEntrySqr + 2 * head.accel * head.len, head.nominalSqr);
     const v1 = Math.sqrt(exitSqr);
     const vn = Math.max(Math.sqrt(head.nominalSqr), v0, v1);
     const t = blockTime(head.len, v0, v1, vn, head.accel);
@@ -171,7 +202,7 @@ class Planner {
 
   /** Planner empties (machine stops): spindle change, dwell, probe, program end. */
   sync() {
-    while (this.queue.length) this.executeHead();
+    while (this.size) this.executeHead();
     this.vEntrySqr = 0;
     this.prevNominalSqr = 0;
   }
@@ -217,8 +248,9 @@ export function plan(tp: Toolpath, cfg: PlannerConfig, sourceLines: number): Pla
       const segments = Math.max(1, Math.floor(Math.abs(0.5 * angle * radius) / segLen));
       const from = [...prev];
       const p = [...prev];
+      const next = [0, 0, 0, 0];
       for (let s = 1; s <= segments; s++) {
-        const next = [...from];
+        for (let k = 0; k < 4; k++) next[k] = from[k]!;
         if (s === segments) {
           for (let k = 0; k < 4; k++) next[k] = end[k]!;
         } else {
@@ -230,11 +262,11 @@ export function plan(tp: Toolpath, cfg: PlannerConfig, sourceLines: number): Pla
           next[lin] = from[lin]! + ((end[lin]! - from[lin]!) * s) / segments;
           next[3] = from[3]! + ((end[3]! - from[3]!) * s) / segments;
         }
-        planner.add([next[0]! - p[0]!, next[1]! - p[1]!, next[2]! - p[2]!, next[3]! - p[3]!], tp.feed[i]!, i);
+        planner.add(next[0]! - p[0]!, next[1]! - p[1]!, next[2]! - p[2]!, next[3]! - p[3]!, tp.feed[i]!, i);
         for (let k = 0; k < 4; k++) p[k] = next[k]!;
       }
     } else {
-      planner.add([end[0]! - prev[0]!, end[1]! - prev[1]!, end[2]! - prev[2]!, end[3]! - prev[3]!], kind === SEG.rapid ? null : tp.feed[i]!, i);
+      planner.add(end[0]! - prev[0]!, end[1]! - prev[1]!, end[2]! - prev[2]!, end[3]! - prev[3]!, kind === SEG.rapid ? null : tp.feed[i]!, i);
       if (kind === SEG.probe) planner.sync();
     }
     for (let k = 0; k < 4; k++) prev[k] = end[k]!;

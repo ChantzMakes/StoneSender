@@ -16,7 +16,8 @@
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
     "tauri": "tauri",
     "app": "tauri dev",
-    "icons": "tauri icon app-icon.svg"
+    "icons": "tauri icon app-icon.svg",
+    "perf": "vitest run --config vitest.perf.config.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

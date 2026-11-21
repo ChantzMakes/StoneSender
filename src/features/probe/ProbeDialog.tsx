@@ -4,6 +4,7 @@
  * requires the probe connection test, runs step by step (every line waits
  * for the controller) and can be stopped with STOP or the Stop button here.
  */
+import { HelpButton } from '@/features/help/HelpButton';
 import { Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -123,7 +124,9 @@ export function ProbeDialog({ open, onOpenChange, profile }: { open: boolean; on
     >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Probe</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Probe <HelpButton section="probing" label="Help: probing" />
+          </DialogTitle>
           <DialogDescription>Find zero, the centre of a hole, a bit's length or the shape of the surface with a touch plate or probe. Keep a hand near STOP the first time.</DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>

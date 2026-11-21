@@ -112,7 +112,7 @@ fn start_from_line_sends_recovery_lines_first() {
     let (link, sink, factory) = ready();
     let src = "G21 G90\nG1 X-10 F3000\nG1 X-20\nG1 X-30 Y-5\nG0 X0 Y0\n";
     let (lines, _) = prepare(src, &FirmwareCaps::GRBL11);
-    let from: Vec<_> = lines.into_iter().filter(|l| l.source_line >= 4).collect();
+    let from = lines.from_source_line(4);
     let prelude = vec!["G21 G90".to_string(), "G53 G0 Z-1".to_string(), "G0 X-20 Y0".to_string(), "G1 F3000".to_string()];
     link.start_job_with("from.nc".into(), from, JobMode::Run, JobOptions { prelude, ..JobOptions::default() }).unwrap();
     let done = sink.wait_for("completed", T, phase(JobPhase::Completed));

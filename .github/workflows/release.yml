@@ -32,6 +32,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::Run this from a version tag (Run workflow → Use workflow from → Tags → v${version}), or push the tag."; exit 1
+          fi
           if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}"; exit 1
           fi

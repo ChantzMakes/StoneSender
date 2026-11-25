@@ -274,6 +274,15 @@ fn is_system(line: &str) -> bool {
     line.starts_with('$') && !line.starts_with("$J=")
 }
 
+fn finish_check(job: &mut Job, now: Instant) {
+    let msg = if job.error_count == 0 {
+        "Check finished: no errors.".to_string()
+    } else {
+        format!("Check finished: {} line(s) would fail.", job.error_count)
+    };
+    job.end(JobPhase::Completed, Some(msg), now);
+}
+
 impl Engine {
     pub fn new(char_counting: bool, rx_buffer: usize) -> Self {
         Engine {
@@ -427,14 +436,7 @@ impl Engine {
                 {
                     let job = self.job.as_mut()?;
                     match job.mode {
-                        JobMode::Check => {
-                            let msg = if job.error_count == 0 {
-                                "Check finished: no errors.".to_string()
-                            } else {
-                                format!("Check finished: {} line(s) would fail.", job.error_count)
-                            };
-                            job.end(JobPhase::Completed, Some(msg), now);
-                        }
+                        JobMode::Check => finish_check(job, now),
                         JobMode::Run => {
                             job.phase = JobPhase::Finishing;
                             job.finishing_since = Some(now);
@@ -484,6 +486,7 @@ impl Engine {
         };
         self.in_flight_bytes = self.in_flight_bytes.saturating_sub(len);
         let code = error.as_ref().and_then(|e| e.0);
+        let control_in_flight = self.in_flight.iter().any(|(_, o, _)| *o == Origin::JobControl);
         match origin {
             Origin::Command(id) => AckEvent::Command { error: code, id },
             Origin::Jog => {
@@ -507,6 +510,19 @@ impl Engine {
                             job.end(JobPhase::Failed, Some(msg.clone()), now);
                             return AckEvent::JobControlFailed(msg);
                         }
+                    }
+                    // Leaving check mode ($C) makes GRBL reset: its `ok` is followed by a welcome
+                    // banner, which flushes and aborts any active job. Finish the check on the `ok`
+                    // so a banner read before the next poll can't turn a finished check into "aborted".
+                    if error.is_none()
+                        && job.mode == JobMode::Check
+                        && job.phase == JobPhase::Running
+                        && job.next >= job.lines.len()
+                        && job.acked >= job.lines.len()
+                        && job.postlude.is_empty()
+                        && !control_in_flight
+                    {
+                        finish_check(job, now);
                     }
                 }
                 AckEvent::Job
@@ -759,6 +775,25 @@ mod tests {
         let p = c.job.as_ref().unwrap().progress(t);
         assert_eq!(p.phase, JobPhase::Completed);
         assert_eq!(p.error_count, 1);
+    }
+
+    #[test]
+    fn check_completes_on_the_closing_ok_before_the_reset_banner() {
+        // Leaving check mode resets GRBL: `ok`, then a welcome banner (→ flush). If the
+        // banner is read before the engine is polled again, the check must still be complete.
+        let t = Instant::now();
+        let mut c = Engine::new(true, 128);
+        c.start_job(Job::new("c".into(), lines(2, "G0X1"), JobMode::Check, t));
+        drain(&mut c, t); // $C
+        c.on_ack(None, t);
+        assert_eq!(drain(&mut c, t).len(), 2);
+        c.on_ack(None, t);
+        c.on_ack(None, t);
+        assert_eq!(drain(&mut c, t), vec![Outgoing::Line { text: "$C".into(), origin: Origin::JobControl }]);
+        c.on_ack(None, t); // closing $C acknowledged — no poll before the banner
+        assert_eq!(c.job.as_ref().unwrap().phase, JobPhase::Completed);
+        assert_eq!(c.flush("the controller reset", t).job_ended, None);
+        assert_eq!(c.job.as_ref().unwrap().phase, JobPhase::Completed);
     }
 
     #[test]

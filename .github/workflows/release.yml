@@ -45,6 +45,26 @@ jobs:
             echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY repository secret (docs/RELEASING.md)"; exit 1
           fi
 
+      # Create the draft once, here, so a permission problem shows up in seconds rather than
+      # after the builds, and the three build jobs only upload into it (tauri-action finds
+      # the draft by its tag).
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; the builds will upload into it."; exit 0
+          fi
+          gh release create "${GITHUB_REF_NAME}" --draft --verify-tag \
+            --title "StoneSender ${GITHUB_REF_NAME#v}" --notes-file - <<'NOTES'
+          Download the installer for your computer below:
+          - **Windows:** `StoneSender_…_x64-setup.exe`
+          - **macOS (Intel and Apple silicon):** `StoneSender_…_universal.dmg`
+          - **Linux:** `.AppImage` (any distribution, updates itself), `.deb` (Ubuntu / Debian) or `.rpm` (Fedora)
+
+          Already installed? StoneSender offers the update itself (Preferences → About & updates).
+          NOTES
+
   build:
     needs: preflight
     strategy:
@@ -124,14 +144,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          # The draft (title and notes) is created by the preflight job.
           releaseName: 'StoneSender __VERSION__'
-          releaseBody: |
-            Download the installer for your computer below:
-            - **Windows:** `StoneSender_…_x64-setup.exe`
-            - **macOS (Intel and Apple silicon):** `StoneSender_…_universal.dmg`
-            - **Linux:** `.AppImage` (any distribution, updates itself), `.deb` (Ubuntu / Debian) or `.rpm` (Fedora)
-
-            Already installed? StoneSender offers the update itself (Preferences → About & updates).
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true

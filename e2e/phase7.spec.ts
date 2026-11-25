@@ -69,7 +69,7 @@ test('surface map: probe a grid and level the loaded job', async ({ page }) => {
   await page.getByTestId('simulate-touch').click();
   await page.getByTestId('probe-heightmap').click();
   // 9 points × ~6 steps, each waiting for its reply: slow with software WebGL
-  await expect(page.getByTestId('probe-result')).toContainText('measured at 9 points', { timeout: 60_000 });
+  await expect(page.getByTestId('probe-result')).toContainText('measured at 9 points', { timeout: process.env.CI ? 120_000 : 60_000 });
   await expect(page.getByTestId('heightmap-preview')).toBeVisible();
   await page.getByTestId('apply-leveling').click();
   await expect(page.getByTestId('probe-result')).toContainText('01-square-leveled.nc');

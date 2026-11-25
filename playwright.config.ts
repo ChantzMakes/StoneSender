@@ -7,10 +7,13 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  // GitHub's runners are slower than a desktop (4 vCPUs shared by the browser, Vite and
+  // software WebGL): fewer workers, more time, and one retry for a starved run.
+  timeout: process.env.CI ? 60_000 : 30_000,
+  retries: process.env.CI ? 1 : 0,
   fullyParallel: true,
   // Software WebGL in headless Chromium is CPU-heavy; too many workers starve each other.
-  workers: 4,
+  workers: process.env.CI ? 2 : 4,
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:1420',

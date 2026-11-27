@@ -1233,7 +1233,7 @@ dependencies = [
 
 [[package]]
 name = "grbl-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "grbl-link"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "grbl-core",
  "log",
@@ -3522,7 +3522,7 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "stonesender"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "grbl-core",
  "grbl-link",
@@ -4522,7 +4522,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "virtual-grbl"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "grbl-core",
  "serde",

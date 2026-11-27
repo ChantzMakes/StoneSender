@@ -25,6 +25,8 @@ permissions:
 jobs:
   preflight:
     runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.changelog.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
       - name: Tag matches package.json, updater key is configured
@@ -45,6 +47,24 @@ jobs:
             echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY repository secret (docs/RELEASING.md)"; exit 1
           fi
 
+      # Release notes = this version's section of CHANGELOG.md (required). They go into the GitHub
+      # release and into latest.json, which is what the app shows when it offers the update.
+      - name: Release notes from CHANGELOG.md
+        id: changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="## [${version}]" 'index($0, v) == 1 { on = 1; next } on && /^## \[/ { exit } on { print }' CHANGELOG.md \
+            | sed -e '/./,$!d' > "${RUNNER_TEMP}/notes.md"
+          if ! grep -q '[^[:space:]]' "${RUNNER_TEMP}/notes.md"; then
+            echo "::error::CHANGELOG.md has no section '## [${version}]' — add one before releasing (docs/RELEASING.md)"; exit 1
+          fi
+          {
+            d="NOTES_$(date +%s%N)"
+            echo "notes<<${d}"
+            cat "${RUNNER_TEMP}/notes.md"
+            echo "${d}"
+          } >> "${GITHUB_OUTPUT}"
+
       # Create the draft once, here, so a permission problem shows up in seconds rather than
       # after the builds, and the three build jobs only upload into it (tauri-action finds
       # the draft by its tag).
@@ -55,15 +75,21 @@ jobs:
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists; the builds will upload into it."; exit 0
           fi
-          gh release create "${GITHUB_REF_NAME}" --draft --verify-tag \
-            --title "StoneSender ${GITHUB_REF_NAME#v}" --notes-file - <<'NOTES'
-          Download the installer for your computer below:
+          {
+            cat "${RUNNER_TEMP}/notes.md"
+            cat <<'NOTES'
+
+          ### Download
+
           - **Windows:** `StoneSender_…_x64-setup.exe`
           - **macOS (Intel and Apple silicon):** `StoneSender_…_universal.dmg`
           - **Linux:** `.AppImage` (any distribution, updates itself), `.deb` (Ubuntu / Debian) or `.rpm` (Fedora)
 
           Already installed? StoneSender offers the update itself (Preferences → About & updates).
           NOTES
+          } > "${RUNNER_TEMP}/release.md"
+          gh release create "${GITHUB_REF_NAME}" --draft --verify-tag \
+            --title "StoneSender ${GITHUB_REF_NAME#v}" --notes-file "${RUNNER_TEMP}/release.md"
 
   build:
     needs: preflight
@@ -73,7 +99,9 @@ jobs:
         include:
           - platform: windows-latest
             args: ''
-          - platform: macos-latest
+          # Intel Mac runner: GitHub's Apple-silicon pool (macos-latest) repeatedly had no capacity.
+          # It still builds the universal app (Intel + Apple silicon).
+          - platform: macos-26-intel
             args: '--target universal-apple-darwin'
           - platform: ubuntu-22.04
             args: ''
@@ -144,8 +172,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          # The draft (title and notes) is created by the preflight job.
+          # The draft (title and notes) is created by the preflight job; releaseBody fills the
+          # `notes` of latest.json (shown in the app's update banner).
           releaseName: 'StoneSender __VERSION__'
+          releaseBody: ${{ needs.preflight.outputs.notes }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true

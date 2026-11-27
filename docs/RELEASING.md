@@ -54,20 +54,24 @@ The workflow uses each set only when its secrets exist.
 ## Each release
 
 1. Make sure CI is green on `main`.
-2. Bump the version (package.json is the only source; the app and installers read it):
+2. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (Added / Changed / Fixed, written for users).
+   The release workflow refuses a version without one, and copies that section into the GitHub
+   release and into `latest.json` — it is what the app shows when it offers the update.
+3. Bump the version (package.json is the only source; the app and installers read it):
    ```powershell
    npm version 0.2.0 --no-git-tag-version
    ```
    Also bump `version` in the root `Cargo.toml` (`[workspace.package]`) to keep them in step, commit.
-3. Tag and push:
+4. Tag and push:
    ```powershell
    git tag v0.2.0
    git push origin main v0.2.0
    ```
    The workflow refuses a tag that doesn't match package.json.
-4. Wait for the three builds (~20–30 min). Open the draft release, write the notes (they are shown
-   in the app's update dialog — Markdown lists, **bold** and `code` work), try an installer.
-5. **Publish** the draft. From then on installed copies offer the update.
+5. Wait for the three builds (~20–30 min). Open the draft release, check the notes (taken from the
+   changelog; edits made here change the GitHub page only, not the notes inside the app's update
+   feed), try an installer.
+6. **Publish** the draft. From then on installed copies offer the update.
 
 To pull a bad release: mark it as a pre-release or delete it; `latest` then points at the previous
 release again. Users who already updated must install the older version by hand.

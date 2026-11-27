@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "status-window",
+  "description": "The pop-out status window is display only: it listens to the main window's status feed and may keep itself on top. Nothing else.",
+  "windows": ["status"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "core:window:allow-set-always-on-top"]
+}

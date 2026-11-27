@@ -53,6 +53,15 @@ pub fn run() {
             app.manage(AppState { link: Link::new(sink), virtual_factory: Mutex::new(None), storage, job_source: Mutex::new(None) });
             Ok(())
         })
+        // The pop-out status window only mirrors the main window: close it with the main window
+        // (otherwise the app would keep running with a status window showing stale values).
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(status) = window.app_handle().get_webview_window("status") {
+                    let _ = status.close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::list_ports,
             commands::link_connect,

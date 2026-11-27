@@ -1,4 +1,4 @@
-import { Bug, CircleHelp, Settings2, SlidersHorizontal } from 'lucide-react';
+import { Bug, CircleHelp, PictureInPicture2, Settings2, SlidersHorizontal } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Logo } from '@/components/Logo';
@@ -14,6 +14,10 @@ import { GrblSettingsDialog } from '@/features/settings/GrblSettingsDialog';
 import { PreferencesDialog } from '@/features/settings/PreferencesDialog';
 import { HelpDialog } from '@/features/help/HelpDialog';
 import { useShortcuts } from '@/features/layout/useShortcuts';
+import { useStatusPublisher } from '@/features/status/useStatusPublisher';
+import { openStatusWindow } from '@/lib/statusFeed';
+import { sysMessage } from '@/store/console';
+import { errorMessage } from '@/lib/utils';
 import { UpdateBanner, useStartupUpdateCheck } from '@/features/layout/UpdateBanner';
 import { WcsDialog } from '@/features/wcs/WcsDialog';
 import { useUi } from '@/store/ui';
@@ -61,6 +65,7 @@ export default function App() {
   useAnalysisSync();
   useShortcuts();
   useStartupUpdateCheck();
+  useStatusPublisher();
   const dropping = useJobDrop();
 
   useEffect(() => {
@@ -104,6 +109,11 @@ export default function App() {
                 </Button>
               </Tip>
             )}
+            <Tip content="Pop-out status window: machine state and job progress with time left, in a separate window you can put on another screen. Display only.">
+              <Button variant="ghost" size="icon" aria-label="Open the status window" data-testid="open-status-window" onClick={() => void openStatusWindow().catch((e) => sysMessage(`Could not open the status window: ${errorMessage(e)}`, 'error'))}>
+                <PictureInPicture2 />
+              </Button>
+            </Tip>
             <Tip content="Preferences: theme, layout, shortcuts, gamepad (Ctrl+,)">
               <Button variant="ghost" size="icon" aria-label="Preferences" data-testid="open-prefs" onClick={() => openPrefs()}>
                 <Settings2 />

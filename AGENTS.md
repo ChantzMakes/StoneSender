@@ -42,10 +42,10 @@ Windows note: tools were installed with winget; in a fresh PowerShell the PATH m
 | Perf: browser main thread | `$env:PERF_E2E=1; npx playwright test perf --workers 1` (`PERF_PROFILE=<file>` saves a CPU profile) |
 | Perf: desktop app | start with `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=9333'; npx tauri dev --release`, then `node scripts/perf/desktop-load.mjs` |
 
-All of the above pass as of the end of Phase 8b (Rust: 86 tests incl. 19 link/streaming and 5 Phase 7 integration
-tests against the emulator, plus 1 ignored perf test; Vitest: 168 incl. the update install gate, planner-vs-emulator timing, removal/export,
-recovery, probing, leveling, transforms, generators, macros, gamepad mapping, shortcuts, help markdown (every
-in-app help link must hit a guide section); Playwright: 36 + 1 opt-in perf spec, run with 4 workers because headless
+All of the above pass as of the 0.1.1 work (Rust: 87 tests incl. 19 link/streaming and 5 Phase 7 integration
+tests against the emulator, plus 1 ignored perf test; Vitest: 174 incl. the update install gate, planner-vs-emulator timing, removal/export,
+recovery, probing, leveling, transforms, generators, macros, gamepad mapping, shortcuts, custom jog step, pop-out
+progress, help markdown (every in-app help link must hit a guide section); Playwright: 38 + 1 opt-in perf spec, run with 4 workers (2 on CI) because headless
 Chromium renders WebGL in software — `freshApp` sets a 1 mm simulation grid and long flows use `test.slow()`;
 clippy clean with `-D warnings`).
 
@@ -234,6 +234,18 @@ docs/USER_GUIDE.md
 34. Releases are **drafts** until the owner publishes them; the updater reads only the latest published
     release, so publishing is the go-live switch. The release workflow refuses a tag that doesn't match
     package.json and refuses to run without the updater key.
+35. **Pop-out status window (owner decision: display only).** `?view=status` renders `StatusWindow` and
+    never loads the app's stores, settings or link; it only listens to the one-way feed in
+    `lib/statusFeed.ts` (Tauri event `status-snapshot` / a BroadcastChannel in the browser preview), which
+    the main window publishes ≤4×/s plus a 1 s keep-alive. After 2.5 s without updates it shows a warning
+    and greys out. Its capability (`capabilities/status.json`) allows only event listen/unlisten and
+    always-on-top. Note: Tauri does not permission-gate app-defined commands per window, so "display only"
+    rests on the pop-out's code never calling `invoke`. The main window closing closes it (`lib.rs`).
+36. **Custom jog step (owner decision: typed step for the arrows).** `lib/machine/jogStep.ts`: plain positive
+    numbers only (display units → mm, 0.0001 mm rounding, ≥ 0.001 mm). Any step (custom, preset, gamepad
+    D-pad) larger than the moved axis's travel (`geometry.envelope`) is not sent and the console says why;
+    GRBL soft limits still apply. Enter only selects the step, it never jogs. Continuous (hold) jogging is
+    unchanged.
 
 ## G-code engine conventions (Phase 3)
 

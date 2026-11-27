@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { backend } from '@/lib/backend';
 import { stepJog } from '@/lib/grbl/commands';
 import { type Dir, needsRestart, type PadSnapshot, stepPresses, stickIntent } from '@/lib/machine/gamepad';
+import { stepTooLarge } from '@/lib/machine/jogStep';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { errorMessage } from '@/lib/utils';
 import { useApp } from '@/store/app';
@@ -88,6 +89,11 @@ export function useGamepad(opts: { profile: MachineProfile; available: boolean; 
       // D-pad / face buttons: single steps while enabled and not stick-jogging
       if (o.available && !jog) {
         for (const d of stepPresses(prev, cur, settings.enableButton)) {
+          const tooLarge = stepTooLarge(o.stepMm, d, o.profile.geometry.envelope);
+          if (tooLarge) {
+            sysMessage(tooLarge, 'warn');
+            continue;
+          }
           const line = stepJog({ x: d[0] * o.stepMm, y: d[1] * o.stepMm, z: d[2] * o.stepMm }, d[2] !== 0 ? o.feedZ : o.feedXY);
           useLink
             .getState()

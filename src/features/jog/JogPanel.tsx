@@ -18,6 +18,7 @@ import { useApp } from '@/store/app';
 import { useUi } from '@/store/ui';
 import { backend } from '@/lib/backend';
 import { stepJog } from '@/lib/grbl/commands';
+import { parseJogStep, stepTooLarge } from '@/lib/machine/jogStep';
 import { useGamepad } from './useGamepad';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { fromDisplay, roundForDisplay, toDisplay, unitLabel } from '@/lib/profile/units';
@@ -89,6 +90,11 @@ function useJogger(profile: MachineProfile, feedXY: number, feedZ: number, stepM
       clearTimeout(holdTimer.current);
       holdTimer.current = null;
       const feed = dir[2] !== 0 ? feedZ : feedXY;
+      const tooLarge = stepTooLarge(stepMm, dir, profile.geometry.envelope);
+      if (tooLarge) {
+        sysMessage(tooLarge, 'warn');
+        return;
+      }
       const line = stepJog({ x: dir[0] * stepMm, y: dir[1] * stepMm, z: dir[2] * stepMm }, feed);
       useLink
         .getState()
@@ -97,7 +103,7 @@ function useJogger(profile: MachineProfile, feedXY: number, feedZ: number, stepM
     } else {
       stopContinuous();
     }
-  }, [feedXY, feedZ, stepMm, stopContinuous]);
+  }, [feedXY, feedZ, profile.geometry.envelope, stepMm, stopContinuous]);
 
   // Stop if the window loses focus or the component goes away.
   useEffect(() => {
@@ -124,10 +130,18 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
   const { begin, end } = useJogger(profile, feedXY, feedZ, stepMm);
   const pad = useGamepad({ profile, available, feedXY, feedZ, stepMm, accel: (d) => accelFor(profile, useLink.getState().controller?.settings, d) });
 
+  // Custom step (typed). It is the active step whenever the step isn't one of the presets.
+  const [customText, setCustomText] = useState('');
+  const custom = customText ? parseJogStep(customText, units) : null;
+  const selectCustom = () => {
+    if (custom?.mm !== undefined) setStepMm(custom.mm);
+  };
+
   useEffect(() => {
     setStepMm(profile.defaults.jog.defaultStepMm);
     setFeedXY(profile.defaults.jog.feedXY);
     setFeedZ(profile.defaults.jog.feedZ);
+    setCustomText('');
   }, [profile.id, profile.defaults.jog]);
 
   const keyboardJog = useUi((s) => s.keyboardJog);
@@ -275,6 +289,44 @@ export function JogPanel({ profile }: { profile: MachineProfile }) {
               </Button>
             ))}
           </div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <label htmlFor="jog-custom-step" className="text-xs text-muted-foreground">
+              Custom
+            </label>
+            <Tip content="Type any distance; each click of an arrow then moves exactly that far. A step larger than the axis's travel is not sent.">
+              <Input
+                id="jog-custom-step"
+                data-testid="jog-custom-step"
+                role="radio"
+                aria-checked={!steps.includes(stepMm)}
+                aria-invalid={!!custom?.error}
+                className={cn('tabular h-8 flex-1 text-right', !steps.includes(stepMm) && 'border-primary ring-1 ring-primary', custom?.error && 'border-destructive')}
+                inputMode="decimal"
+                placeholder="e.g. 2.5"
+                value={customText}
+                onFocus={selectCustom}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  setCustomText(text);
+                  const p = text ? parseJogStep(text, units) : null;
+                  if (p?.mm !== undefined) setStepMm(p.mm);
+                }}
+                onKeyDown={(e) => {
+                  // Enter selects the step; it never jogs from the text box.
+                  if (e.key === 'Enter') {
+                    selectCustom();
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+            </Tip>
+            <span className="text-xs text-muted-foreground">{unitLabel('length', units)}</span>
+          </div>
+          {custom?.error && (
+            <div className="mt-1 text-xs text-destructive" data-testid="jog-custom-error">
+              {custom.error}
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2">
           {(

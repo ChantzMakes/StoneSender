@@ -80,7 +80,9 @@ if you know where the machine is.
 ## 4. Moving the machine and setting zero
 
 - **Jog panel** (right side): click an arrow to move one step (pick the step size underneath); **press and
-  hold** to move continuously until you let go. To jog with the keyboard, switch on **Keys** in the Jog
+  hold** to move continuously until you let go. For a distance that isn't one of the buttons, type it in
+  the **Custom** box (for example `37.5`): each click of an arrow then moves exactly that far. A step
+  longer than that axis's travel is not sent (the console says why); clicking a step button switches back. To jog with the keyboard, switch on **Keys** in the Jog
   panel: then the arrow keys move X/Y and Page Up / Page Down move Z (tap = one step, hold = move), and
   [ / ] change the step. **Keys** is off every time the app starts, so a key pressed by accident can't
   move the machine. You can choose other keys in Preferences.
@@ -109,15 +111,24 @@ when it resets.
    left shown while running comes from the same estimate.
 4. **Pause** / **Resume** whenever you like. If the controller rejects a line mid-job, the machine pauses and
    the app shows the line and what's wrong: *Continue* skips it, *Stop* ends the job.
-5. **Stop** (or the red STOP) slows the machine to a halt, then resets the controller so the position is
-   kept.
+5. **Stop** (or the red **Stop** at the top right) slows the machine to a halt, then resets the controller
+   so the position is kept.
 
-The **3D view** tab shows the toolpath: orange = rapid moves, blue = cutting, green = arcs, pink =
+### Status window
+
+The **status window** button at the top (next to Preferences) opens a separate, resizable window with
+just the machine state and the job: a big progress bar, the **time left**, the time elapsed and the line
+number, plus the position. Put it on a second screen or across the shop; the pin button keeps it on top
+of other windows. It only shows information — it has no buttons that reach the machine, so use the main
+window (or your hardware E-stop) to stop. If it stops getting updates from the main window it says so
+and greys out, and it closes when the main window closes.
+
+The **3D view** tab shows the toolpath: grey = rapid moves, blue = cutting, green = arcs, pink =
 plunges. Drag to rotate, right-drag to pan, scroll to zoom; the buttons top-right switch to Top / Front /
 Side / 3D views, fit the job, follow the tool, hide rapids, or colour by feed, depth or power. Press ▶ under
 the view to play the job (up to 100× speed) or drag the slider; the matching line is highlighted in the
 G-code tab, and clicking a line there jumps the playback to it. The ruler button measures between two
-points. While a job runs, finished parts of the path turn grey and the red marker shows where the machine
+points. While a job runs, finished parts of the path turn orange and the orange marker shows where the machine
 really is.
 
 The 3D view also shows a model of **your machine**, built from your profile — it moves along with the

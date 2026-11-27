@@ -6,36 +6,16 @@ import { axesFor, hasLaser } from '@/lib/profile/geometry';
 import type { MachineProfile } from '@/lib/profile/schema';
 import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
 import { cn } from '@/lib/utils';
+import { OFFLINE_DOT, STATE_PILL, stateText } from './stateStyle';
 import { useLink } from '@/store/link';
-
-// StatusBadge (design system): a dot AND a word on a sunken pill; colour is never the only cue.
-// Idle / check / sleep = ink-muted, motion = run, hold-like = hold, alarm = alarm.
-const STATE_STYLE: Record<string, { label: string; tone: string }> = {
-  idle: { label: 'Idle', tone: 'text-muted-foreground' },
-  run: { label: 'Running', tone: 'text-run' },
-  jog: { label: 'Jogging', tone: 'text-run' },
-  home: { label: 'Homing', tone: 'text-run' },
-  hold: { label: 'Hold', tone: 'text-hold' },
-  door: { label: 'Door open', tone: 'text-hold' },
-  check: { label: 'Check mode', tone: 'text-muted-foreground' },
-  sleep: { label: 'Sleep', tone: 'text-muted-foreground' },
-  tool: { label: 'Tool change', tone: 'text-hold' },
-  alarm: { label: 'Alarm', tone: 'text-alarm' },
-  unknown: { label: 'Unknown', tone: 'text-muted-foreground' },
-};
-
-const PILL =
-  'inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 text-xs font-semibold tracking-[0.04em] whitespace-nowrap uppercase before:size-2 before:shrink-0 before:rounded-full before:content-[""]';
 
 export function StateBadge({ state }: { state: MachineState | null | undefined }) {
   // Disconnected: hollow dot
-  if (!state) return <span className={cn(PILL, 'text-muted-foreground before:shadow-[inset_0_0_0_1.5px_currentColor]')}>Offline</span>;
-  const s = STATE_STYLE[state.name] ?? STATE_STYLE.unknown!;
-  const sub = state.name === 'hold' ? (state.sub === 1 ? ' (stopping)' : '') : state.name === 'door' && state.sub !== undefined ? ` ${state.sub}` : '';
+  if (!state) return <span className={cn(STATE_PILL, OFFLINE_DOT)}>Offline</span>;
+  const s = stateText(state);
   return (
-    <span className={cn(PILL, s.tone, 'before:bg-current')} data-testid="machine-state">
+    <span className={cn(STATE_PILL, s.tone, 'before:bg-current')} data-testid="machine-state">
       {s.label}
-      {sub}
     </span>
   );
 }

@@ -25,90 +25,146 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'Consolas', 'SF Mono', Menlo, monospace;
+  /* StoneSender design system extras (tokens.json): brand, surfaces, machine state, axes */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+  --color-mark-ink: var(--mark-ink);
+  --color-run: var(--run);
+  --color-hold: var(--hold);
+  --color-alarm: var(--alarm);
+  --color-axis-x: var(--axis-x);
+  --color-axis-y: var(--axis-y);
+  --color-axis-z: var(--axis-z);
+  --color-axis-a: var(--axis-a);
+  /* radius-sm/md/lg/xl from the design system (6 / 10 / 14 / 20 px) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --font-display: 'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'Consolas', Menlo, monospace;
 }
 
+/*
+ * Colours: the StoneSender design system (tokens.json). Dark is the default theme; Light for
+ * bright shops. The design-system tokens are defined first, then the component tokens the UI
+ * uses (shadcn names) are mapped onto them:
+ *   background = surface · card/popover = surface-raised · muted/secondary/accent = surface-sunken
+ *   border = line · input = line-strong (control borders, 3:1) · ring = focus-ring
+ *   primary = brand · destructive = alarm · success = run · warning = hold · info = axis-z
+ */
 :root {
-  --radius: 0.6rem;
-  --background: oklch(0.985 0.002 250);
-  --foreground: oklch(0.2 0.02 255);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 255);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 255);
-  --primary: oklch(0.55 0.17 250);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.006 250);
-  --secondary-foreground: oklch(0.25 0.02 255);
-  --muted: oklch(0.955 0.005 250);
-  --muted-foreground: oklch(0.5 0.02 255);
-  --accent: oklch(0.94 0.012 250);
-  --accent-foreground: oklch(0.22 0.02 255);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.72 0.16 70);
-  --success: oklch(0.62 0.15 150);
-  --info: oklch(0.6 0.13 230);
-  --border: oklch(0.9 0.008 250);
-  --input: oklch(0.88 0.01 250);
-  --ring: oklch(0.55 0.17 250);
+  --radius: 14px;
+  --surface: #f4f4f2;
+  --surface-raised: #ffffff;
+  --surface-sunken: #ecece8;
+  --line: #e4e4e0;
+  --line-strong: #8a8e96;
+  --ink: #16181d;
+  --ink-muted: #5a5d66;
+  --mark-ink: #16181d;
+  --brand: #e8590c;
+  --brand-hover: #f06a22;
+  --on-brand: #16181d;
+  --brand-text: #b23a0a;
+  --brand-soft: #fde8db;
+  --focus-ring: #b23a0a;
+  --run: #1f7a3a;
+  --hold: #8a5a00;
+  --alarm: #b02525;
+  --on-alarm: #ffffff;
+  --axis-x: #c2255c;
+  --axis-y: #237032;
+  --axis-z: #1864ab;
+  --axis-a: #8a5a00;
 }
 
 .dark {
-  --background: oklch(0.17 0.012 255);
-  --foreground: oklch(0.94 0.006 250);
-  --card: oklch(0.205 0.014 255);
-  --card-foreground: oklch(0.94 0.006 250);
-  --popover: oklch(0.22 0.015 255);
-  --popover-foreground: oklch(0.94 0.006 250);
-  --primary: oklch(0.68 0.15 245);
-  --primary-foreground: oklch(0.16 0.02 255);
-  --secondary: oklch(0.26 0.015 255);
-  --secondary-foreground: oklch(0.92 0.006 250);
-  --muted: oklch(0.24 0.014 255);
-  --muted-foreground: oklch(0.68 0.015 250);
-  --accent: oklch(0.28 0.02 255);
-  --accent-foreground: oklch(0.95 0.006 250);
-  --destructive: oklch(0.62 0.21 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.78 0.15 75);
-  --success: oklch(0.7 0.15 150);
-  --info: oklch(0.7 0.12 230);
-  --border: oklch(0.3 0.015 255);
-  --input: oklch(0.32 0.016 255);
-  --ring: oklch(0.68 0.15 245);
+  --surface: #0f1114;
+  --surface-raised: #181b20;
+  --surface-sunken: #0a0b0d;
+  --line: #2a2e35;
+  --line-strong: #6b727e;
+  --ink: #ecedef;
+  --ink-muted: #a3a8b1;
+  --mark-ink: #ecedef;
+  --brand: #e8590c;
+  --brand-hover: #f06a22;
+  --on-brand: #16181d;
+  --brand-text: #ff8a4c;
+  --brand-soft: #4a2a18;
+  --focus-ring: #ff8a4c;
+  --run: #4cc38a;
+  --hold: #f2b84b;
+  --alarm: #ff6b6b;
+  --on-alarm: #16181d;
+  --axis-x: #ff8787;
+  --axis-y: #69db7c;
+  --axis-z: #74c0fc;
+  --axis-a: #f2b84b;
+}
+
+:root,
+.dark {
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--surface-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--brand);
+  --primary-foreground: var(--on-brand);
+  --secondary: var(--surface-sunken);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-sunken);
+  --accent-foreground: var(--ink);
+  --destructive: var(--alarm);
+  --destructive-foreground: var(--on-alarm);
+  --warning: var(--hold);
+  --success: var(--run);
+  --info: var(--axis-z);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--focus-ring);
 }
 
 /* High contrast (Phase 8): black background, white text, bold borders and colours —
-   readable from across the shop and in direct light. Applied together with .dark. */
+   readable from across the shop and in direct light. Applied together with .dark; keeps the
+   design system's orange accent and state colours, pushed brighter. */
 .dark.contrast {
-  --background: oklch(0 0 0);
-  --foreground: oklch(1 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.14 0 0);
-  --popover-foreground: oklch(1 0 0);
-  --primary: oklch(0.82 0.17 210);
-  --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.2 0 0);
-  --muted-foreground: oklch(0.88 0 0);
-  --accent: oklch(0.3 0 0);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.66 0.25 27);
-  --destructive-foreground: oklch(1 0 0);
-  --warning: oklch(0.88 0.18 95);
-  --success: oklch(0.82 0.2 145);
-  --info: oklch(0.82 0.14 230);
-  --border: oklch(0.7 0 0);
-  --input: oklch(0.75 0 0);
-  --ring: oklch(0.9 0.18 95);
+  --surface: #000000;
+  --surface-raised: #0e0e0e;
+  --surface-sunken: #1c1c1c;
+  --line: #9a9a9a;
+  --line-strong: #c8c8c8;
+  --ink: #ffffff;
+  --ink-muted: #e0e0e0;
+  --mark-ink: #ffffff;
+  --brand: #ff7a2e;
+  --brand-hover: #ff8f4d;
+  --on-brand: #000000;
+  --brand-text: #ffa36b;
+  --brand-soft: #5a2c10;
+  --focus-ring: #ffd23f;
+  --run: #5cf09a;
+  --hold: #ffd23f;
+  --alarm: #ff7070;
+  --on-alarm: #000000;
+  --axis-x: #ff9a9a;
+  --axis-y: #7cf08e;
+  --axis-z: #8ed0ff;
+  --axis-a: #ffd23f;
 }
 
 @layer base {
@@ -156,10 +212,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Monaco: running line during a job */
+/* Monaco: running line during a job (GcodeView: brand-soft tint + 3px brand bar) */
 .gcode-current-line {
-  background: color-mix(in oklch, var(--color-primary) 22%, transparent);
+  background: var(--color-brand-soft);
 }
 .gcode-current-gutter {
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--color-brand);
+}
+
+/* Design-system type styles */
+.font-display {
+  font-family: var(--font-display);
+}
+.ss-label {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
 }

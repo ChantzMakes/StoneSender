@@ -23,8 +23,9 @@ import { StockDialog } from './StockDialog';
 import { useSimSetup, useSimWco } from './useSimSetup';
 
 const PALETTES: Record<'dark' | 'light' | 'contrast', Palette> = {
-  dark: { background: '#141920', grid: '#2a3340', section: '#3c4a5c', label: '#9aa7b6' },
-  light: { background: '#f3f5f8', grid: '#d5dbe3', section: '#b3bcc8', label: '#4b5563' },
+  // Design system: the viewport sits on surface-sunken; grid in line / line-strong, labels ink-muted.
+  dark: { background: '#0a0b0d', grid: '#1f2228', section: '#2a2e35', label: '#a3a8b1' },
+  light: { background: '#ecece8', grid: '#dcdcd6', section: '#c4c5c0', label: '#5a5d66' },
   contrast: { background: '#000000', grid: '#5a5a5a', section: '#a0a0a0', label: '#ffffff' },
 };
 
@@ -43,12 +44,12 @@ function Legend({ profile }: { profile: MachineProfile }) {
   const units = profile.units;
   if (mode === 'type') {
     const items: [string, string][] = [
-      ['#ff9e42', profile.machineType === 'laser' ? 'Travel' : 'Rapid'],
+      ['#a3a8b1', profile.machineType === 'laser' ? 'Travel' : 'Rapid'],
       ['#4fa1ff', profile.machineType === 'laser' ? 'Burn' : 'Cut'],
       ['#59d68c', 'Arc'],
       ...(profile.machineType === 'laser' ? [] : ([['#ff5c7a', 'Plunge']] as [string, string][])),
       ['#c48cff', 'Probe'],
-      ['#73777f', 'Done'],
+      ['#e8590c', 'Done'],
     ];
     return (
       <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -285,18 +286,18 @@ export function Viewer3D({ profile }: { profile: MachineProfile }) {
             </span>
           )}
           {assumed && <span>Machine placed assuming the stock lies on the bed (connect to use your real work zero)</span>}
-          {sim.measuring && <span className="text-yellow-500">Click two points (snaps to toolpath ends)</span>}
+          {sim.measuring && <span className="text-hold">Click two points (snaps to toolpath ends)</span>}
           <Legend profile={profile} />
         </div>
         {checks && (checks.travel.length > 0 || checks.belowStock || checks.rapidsThroughStockCount > 0) && (
           <div className="pointer-events-none absolute top-12 right-2 z-30 flex max-w-xs flex-col gap-0.5 rounded-md border border-destructive/40 bg-card/90 px-2 py-1 text-[11px] backdrop-blur" data-testid="sim-problems">
-            {checks.travel.length > 0 && <span className="text-red-500">● Leaves the machine travel ({checks.travel.map((t) => `${t.axis}${t.side === 'max' ? '+' : '−'}`).join(', ')}) from line {checks.travel[0]!.line}</span>}
+            {checks.travel.length > 0 && <span className="text-alarm">● Leaves the machine travel ({checks.travel.map((t) => `${t.axis}${t.side === 'max' ? '+' : '−'}`).join(', ')}) from line {checks.travel[0]!.line}</span>}
             {checks.belowStock && (
               <span className="text-fuchsia-400">
                 ● Cuts {formatLength(checks.belowStock.maxDepth, units, 2)} {unitLabel('length', units)} below the stock from line {checks.belowStock.line}
               </span>
             )}
-            {checks.rapidsThroughStockCount > 0 && <span className="text-orange-400">● {checks.rapidsThroughStockCount} rapid move(s) through the stock, first at line {checks.rapidsThroughStock[0]!.line}</span>}
+            {checks.rapidsThroughStockCount > 0 && <span className="text-hold">● {checks.rapidsThroughStockCount} rapid move(s) through the stock, first at line {checks.rapidsThroughStock[0]!.line}</span>}
             {assumed && <span className="text-muted-foreground">Travel checked against an assumed work zero.</span>}
           </div>
         )}

@@ -331,6 +331,23 @@ docs/USER_GUIDE.md
 - drei `<Html>` labels use `zIndexRange={[20, 0]}` and viewer overlays `z-30`, so dialogs (z-40) cover them.
 - With the machine model hidden, moving-table machines no longer slide the job in Y.
 
+## Design system (theme)
+
+- Source: the owner's StoneSender design system (claude.ai artifact, `tokens.json` + README). Its colour
+  tokens are CSS variables in `src/index.css` (`--surface`, `--brand`, `--run`, `--axis-x`…, Dark default,
+  Light, plus our high-contrast variant), exposed to Tailwind as `bg-surface-sunken`, `text-brand-text`,
+  `text-run`, `text-axis-x`… The shadcn names the components use (`--primary`, `--card`, `--muted`…) are
+  mapped onto them in one block — change colours there, not per component.
+- Fonts are bundled from `@fontsource-variable/*` (Inter = UI, JetBrains Mono = numbers and G-code,
+  Space Grotesk = `font-display`: wordmark, axis letters). No network fonts (CSP `font-src 'self'`).
+- Rules used: orange (`brand`) only for the primary action, the logo, the active G-code line and the
+  completed cut in the 3D view (so rapids are neutral grey); machine-state colours only with a word
+  (`StateBadge` pill with a dot); the on-screen button is labelled "Stop", never "E-stop".
+- The logo mark is inline SVG (`components/Logo.tsx`, copied from the design system) so it follows the
+  theme. The OS app icon (`app-icon.svg` → `npm run icons`) is unchanged so far.
+- The 3D view palette (`Viewer3D.tsx` PALETTES, shader colours in `Scene.tsx`) and the Monaco themes
+  (`monacoSetup.ts`) hold hex copies of the tokens (canvas/WebGL can't read CSS variables).
+
 ## Phase 8b conventions
 
 - Name/version: `productName`/`mainBinaryName` StoneSender, crate `stonesender` (lib `stonesender_lib`).

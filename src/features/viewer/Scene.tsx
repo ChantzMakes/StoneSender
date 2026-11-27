@@ -66,7 +66,8 @@ void main() {
   vec3 col;
   float alpha = 1.0;
   if (aKind < 0.5) {
-    col = vec3(1.0, 0.62, 0.26);
+    // Rapids: neutral (ink-muted) — orange is reserved for the brand / completed cut.
+    col = vec3(0.64, 0.66, 0.69);
     alpha = 0.5 * uShowRapids;
   } else if (uMode < 0.5) {
     if (aKind < 1.5) col = vec3(0.31, 0.63, 1.0);
@@ -81,7 +82,8 @@ void main() {
     col = ramp(norm(aPower, uPowerRange));
   }
   if (uTime >= 0.0 && aTime <= uTime) {
-    col = mix(col, vec3(0.45, 0.47, 0.5), 0.75);
+    // Completed cut in brand (spindle orange #E8590C), per the design system.
+    col = mix(col, vec3(0.91, 0.35, 0.05), 0.85);
     alpha *= 0.85;
   }
   vColor = vec4(col, alpha);
@@ -180,7 +182,7 @@ function Axes({ size, palette }: { size: number; palette: Palette }) {
       </lineSegments>
       {(['X', 'Y', 'Z'] as const).map((a, i) => (
         <Html zIndexRange={[20, 0]} key={a} position={[i === 0 ? size * 1.08 : 0, i === 1 ? size * 1.08 : 0, i === 2 ? size * 1.08 : 0]} center className="pointer-events-none select-none">
-          <span className="text-[11px] font-bold" style={{ color: ['#ff5a5a', '#4ce36a', '#4d8cff'][i], textShadow: `0 0 3px ${palette.background}` }}>
+          <span className="text-[11px] font-bold" style={{ color: ['#ff8787', '#69db7c', '#74c0fc'][i], textShadow: `0 0 3px ${palette.background}` }}>
             {a}
           </span>
         </Html>
@@ -237,7 +239,7 @@ function ToolMarkers({ analysis, profile }: { analysis: AnalysisResult | null; p
   return (
     <>
       <group ref={live} visible={false}>
-        {marker('#ef4444', 0.95)}
+        {marker('#e8590c', 0.95)}
       </group>
       <group ref={ghost} visible={false}>
         {marker('#38bdf8', 0.6)}

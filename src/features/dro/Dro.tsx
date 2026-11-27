@@ -8,31 +8,39 @@ import { formatLength, toDisplay, unitLabel } from '@/lib/profile/units';
 import { cn } from '@/lib/utils';
 import { useLink } from '@/store/link';
 
-const STATE_STYLE: Record<string, { label: string; variant: 'success' | 'info' | 'warning' | 'destructive' | 'secondary' }> = {
-  idle: { label: 'Idle', variant: 'success' },
-  run: { label: 'Running', variant: 'info' },
-  jog: { label: 'Jogging', variant: 'info' },
-  home: { label: 'Homing', variant: 'info' },
-  hold: { label: 'Hold', variant: 'warning' },
-  door: { label: 'Door open', variant: 'warning' },
-  check: { label: 'Check mode', variant: 'secondary' },
-  sleep: { label: 'Sleep', variant: 'secondary' },
-  tool: { label: 'Tool change', variant: 'warning' },
-  alarm: { label: 'ALARM', variant: 'destructive' },
-  unknown: { label: 'Unknown', variant: 'secondary' },
+// StatusBadge (design system): a dot AND a word on a sunken pill; colour is never the only cue.
+// Idle / check / sleep = ink-muted, motion = run, hold-like = hold, alarm = alarm.
+const STATE_STYLE: Record<string, { label: string; tone: string }> = {
+  idle: { label: 'Idle', tone: 'text-muted-foreground' },
+  run: { label: 'Running', tone: 'text-run' },
+  jog: { label: 'Jogging', tone: 'text-run' },
+  home: { label: 'Homing', tone: 'text-run' },
+  hold: { label: 'Hold', tone: 'text-hold' },
+  door: { label: 'Door open', tone: 'text-hold' },
+  check: { label: 'Check mode', tone: 'text-muted-foreground' },
+  sleep: { label: 'Sleep', tone: 'text-muted-foreground' },
+  tool: { label: 'Tool change', tone: 'text-hold' },
+  alarm: { label: 'Alarm', tone: 'text-alarm' },
+  unknown: { label: 'Unknown', tone: 'text-muted-foreground' },
 };
 
+const PILL =
+  'inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 text-xs font-semibold tracking-[0.04em] whitespace-nowrap uppercase before:size-2 before:shrink-0 before:rounded-full before:content-[""]';
+
 export function StateBadge({ state }: { state: MachineState | null | undefined }) {
-  if (!state) return <Badge variant="secondary">—</Badge>;
+  // Disconnected: hollow dot
+  if (!state) return <span className={cn(PILL, 'text-muted-foreground before:shadow-[inset_0_0_0_1.5px_currentColor]')}>Offline</span>;
   const s = STATE_STYLE[state.name] ?? STATE_STYLE.unknown!;
   const sub = state.name === 'hold' ? (state.sub === 1 ? ' (stopping)' : '') : state.name === 'door' && state.sub !== undefined ? ` ${state.sub}` : '';
   return (
-    <Badge variant={s.variant} className="px-2.5 py-1 text-sm" data-testid="machine-state">
+    <span className={cn(PILL, s.tone, 'before:bg-current')} data-testid="machine-state">
       {s.label}
       {sub}
-    </Badge>
+    </span>
   );
 }
+
+const AXIS_TONE: Record<string, string> = { X: 'text-axis-x', Y: 'text-axis-y', Z: 'text-axis-z', A: 'text-axis-a' };
 
 export function Dro({ profile }: { profile: MachineProfile }) {
   const status = useLink((s) => s.status);
@@ -57,10 +65,10 @@ export function Dro({ profile }: { profile: MachineProfile }) {
       <PanelTitle actions={<StateBadge state={connected ? status?.state : null} />}>Position</PanelTitle>
       <div className="flex flex-col gap-1.5 p-3">
         {axes.map((axis, i) => (
-          <div key={axis} className="grid grid-cols-[2rem_1fr] items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
-            <span className={cn('text-xl font-bold', axis === 'X' ? 'text-red-400' : axis === 'Y' ? 'text-green-400' : axis === 'Z' ? 'text-blue-400' : 'text-amber-400')}>{axis}</span>
+          <div key={axis} className="grid grid-cols-[2rem_1fr] items-center gap-3 rounded-md bg-surface-sunken px-3 py-2">
+            <span className={cn('font-display text-xl font-bold', AXIS_TONE[axis])}>{axis}</span>
             <div className="flex flex-col items-end">
-              <span className="tabular font-mono text-3xl leading-none font-semibold" data-testid={`dro-work-${axis}`}>
+              <span className="tabular font-mono text-[1.75rem] leading-8 font-medium" data-testid={`dro-work-${axis}`}>
                 {value(status?.wpos, i, axis)}
               </span>
               <span className="tabular font-mono text-xs text-muted-foreground">
@@ -73,7 +81,7 @@ export function Dro({ profile }: { profile: MachineProfile }) {
           <span>Work coordinates ({units === 'inch' ? 'in' : 'mm'}{axes.includes('A') ? ', A in °' : ''})</span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className="rounded-lg border p-2">
+          <div className="rounded-md bg-surface-sunken p-2">
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Gauge className="size-3.5" /> Feed
             </div>
@@ -82,7 +90,7 @@ export function Dro({ profile }: { profile: MachineProfile }) {
             </div>
             {status && status.overrides.feed !== 100 && <div className="text-xs text-warning">override {status.overrides.feed}%</div>}
           </div>
-          <div className="rounded-lg border p-2">
+          <div className="rounded-md bg-surface-sunken p-2">
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Zap className="size-3.5" /> {laser ? 'Laser power' : 'Spindle'}
             </div>

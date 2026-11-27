@@ -86,7 +86,7 @@ export function RemovalPanel({ profile, stockColor }: { profile: MachineProfile;
         </span>
       )}
       {groups.length === 0 ? (
-        <span className="text-green-600 dark:text-green-400" data-testid="removal-ok">
+        <span className="text-run" data-testid="removal-ok">
           ✓ No gouges, holder or flute problems found
         </span>
       ) : (

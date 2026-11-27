@@ -145,7 +145,10 @@ export default function GcodeEditor() {
           options={{
             readOnly: active,
             minimap: { enabled: text.length < 2_000_000 },
+            // Design system `code` style: JetBrains Mono 13/20
             fontSize: 13,
+            lineHeight: 20,
+            fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace",
             scrollBeyondLastLine: false,
             renderWhitespace: 'none',
             wordWrap: 'off',

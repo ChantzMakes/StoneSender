@@ -61,7 +61,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 export function PanelTitle({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="flex h-9 shrink-0 items-center justify-between border-b px-3">
-      <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{children}</h2>
+      <h2 className="ss-label">{children}</h2>
       {actions && <div className="flex items-center gap-1">{actions}</div>}
     </div>
   );

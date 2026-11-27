@@ -1,6 +1,7 @@
 import { Bug, CircleHelp, Settings2, SlidersHorizontal } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Tip, TooltipProvider } from '@/components/ui/primitives';
 import { ConnectionBar } from '@/features/connection/ConnectionBar';
@@ -38,7 +39,7 @@ import { useLink } from '@/store/link';
 import { useActiveProfile, useProfiles } from '@/store/profiles';
 
 function Handle({ direction }: { direction: 'horizontal' | 'vertical' }) {
-  return <PanelResizeHandle className={direction === 'horizontal' ? 'w-1 bg-border/60 transition-colors hover:bg-primary/50' : 'h-1 bg-border/60 transition-colors hover:bg-primary/50'} />;
+  return <PanelResizeHandle className={direction === 'horizontal' ? 'w-1 bg-border transition-colors hover:bg-brand/60' : 'h-1 bg-border transition-colors hover:bg-brand/60'} />;
 }
 
 export default function App() {
@@ -83,10 +84,9 @@ export default function App() {
     <TooltipProvider>
       <div className="flex h-full flex-col">
         {/* Wraps instead of clipping on narrow windows / large UI sizes: STOP must always be visible. */}
-        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-3 py-1.5">
-          <div className="flex items-center gap-2 pr-2">
-            <img src="/app-icon.svg" alt="" className="size-7" />
-            <span className="hidden font-semibold lg:inline">StoneSender</span>
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b bg-card px-4 py-1.5">
+          <div className="pr-2" aria-label="StoneSender">
+            <Logo />
           </div>
           <ProfileSwitcher onManage={() => setManagerOpen(true)} onNew={() => setWizardOpen(true)} />
           <div className="mx-1 h-6 w-px bg-border" />
@@ -129,7 +129,7 @@ export default function App() {
               {(() => {
                 const show = layout.show;
                 const status = (order: number) => (
-                  <Panel key="status" id="status" order={order} defaultSize={22} minSize={16} maxSize={40} className="!overflow-y-auto" data-testid="column-status">
+                  <Panel key="status" id="status" order={order} defaultSize={22} minSize={16} maxSize={40} className="bg-card !overflow-y-auto" data-testid="column-status">
                     {/* The position readout is always shown (with STOP in the header). */}
                     <Dro profile={profile} />
                     {show.machine && (
@@ -149,7 +149,7 @@ export default function App() {
                 const hasWork = show.job || show.jog || show.macros;
                 const work = (order: number) =>
                   hasWork ? (
-                    <Panel key="work" id="work" order={order} defaultSize={24} minSize={18} maxSize={40} className="!overflow-y-auto" data-testid="column-work">
+                    <Panel key="work" id="work" order={order} defaultSize={24} minSize={18} maxSize={40} className="bg-card !overflow-y-auto" data-testid="column-work">
                       {[
                         show.job && <JobPanel key="job" profile={profile} />,
                         show.jog && <JogPanel key="jog" profile={profile} />,
@@ -168,7 +168,7 @@ export default function App() {
                     <PanelGroup direction="vertical" autoSaveId={show.console ? 'center-layout' : 'center-layout-noconsole'}>
                       <Panel id="view" order={1} defaultSize={58} minSize={20} className="flex flex-col">
                         <Tabs value={centerTab} onValueChange={(v) => updateApp((s) => ({ ...s, centerTab: v as 'view' | 'editor' }))} className="flex min-h-0 flex-1 flex-col">
-                          <div className="flex h-9 shrink-0 items-center border-b px-2">
+                          <div className="flex h-9 shrink-0 items-center border-b bg-card px-2">
                             <TabsList className="h-7 p-0.5">
                               <TabsTrigger value="view" className="py-0.5 text-xs">
                                 3D view

@@ -104,7 +104,7 @@ export function StopButton() {
       }
     >
       <Button data-testid="stop-button" variant="destructive" size="lg" disabled={disabled} onClick={() => void emergencyStop()} className="h-10 px-5 font-bold tracking-wide">
-        <OctagonX className="size-5!" /> STOP
+        <OctagonX className="size-5!" /> Stop
       </Button>
     </Tip>
   );

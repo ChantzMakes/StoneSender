@@ -54,8 +54,37 @@ export function setupMonaco() {
     { token: 'linenum', foreground: dark ? '6b7d8f' : '94a3b8' },
     { token: 'invalid', foreground: 'ff5555', fontStyle: 'underline' },
   ];
-  monaco.editor.defineTheme('gcode-dark', { base: 'vs-dark', inherit: true, rules: rules(true), colors: { 'editor.background': '#1a1f27' } });
-  monaco.editor.defineTheme('gcode-light', { base: 'vs', inherit: true, rules: rules(false), colors: {} });
+  // GcodeView (design system): surface-sunken background, ink-muted line numbers, brand-soft selection.
+  monaco.editor.defineTheme('gcode-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: rules(true),
+    colors: {
+      'editor.background': '#0a0b0d',
+      'editor.foreground': '#ecedef',
+      'editorLineNumber.foreground': '#6b727e',
+      'editorLineNumber.activeForeground': '#a3a8b1',
+      'editor.lineHighlightBackground': '#181b20',
+      'editor.selectionBackground': '#4a2a18',
+      'editorCursor.foreground': '#ff8a4c',
+      'focusBorder': '#ff8a4c',
+    },
+  });
+  monaco.editor.defineTheme('gcode-light', {
+    base: 'vs',
+    inherit: true,
+    rules: rules(false),
+    colors: {
+      'editor.background': '#ecece8',
+      'editor.foreground': '#16181d',
+      'editorLineNumber.foreground': '#8a8e96',
+      'editorLineNumber.activeForeground': '#5a5d66',
+      'editor.lineHighlightBackground': '#ffffff',
+      'editor.selectionBackground': '#fde8db',
+      'editorCursor.foreground': '#b23a0a',
+      'focusBorder': '#b23a0a',
+    },
+  });
 
   monaco.languages.registerHoverProvider('gcode', {
     provideHover(model, position) {
